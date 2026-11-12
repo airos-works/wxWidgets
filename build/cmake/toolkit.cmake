@@ -30,6 +30,11 @@ elseif(APPLE)
     set(wxDEFAULT_TOOLKIT osx_cocoa)
     set(wxTOOLKIT_OPTIONS osx_cocoa gtk2 gtk3 gtk4 qt)
     set(wxPLATFORM OSX)
+elseif(HAIKU)
+    # air/OS / Haiku: the native port on the Be API, built as wxUniversal
+    set(wxDEFAULT_TOOLKIT haiku)
+    set(wxTOOLKIT_OPTIONS haiku)
+    set(wxPLATFORM UNIX)
 elseif(UNIX)
     set(wxDEFAULT_TOOLKIT gtk3)
     set(wxTOOLKIT_OPTIONS gtk2 gtk3 gtk4 motif qt)
@@ -40,8 +45,12 @@ endif()
 
 wx_option(wxBUILD_TOOLKIT "Toolkit used by wxWidgets" ${wxDEFAULT_TOOLKIT}
     STRINGS ${wxTOOLKIT_OPTIONS})
-# TODO: set to univ for universal build
+# The widget set is "univ" for the wxUniversal ports
 set(wxBUILD_WIDGETSET "")
+if(wxBUILD_TOOLKIT STREQUAL "haiku")
+    set(wxBUILD_WIDGETSET "univ")
+    set(WXUNIV ON)
+endif()
 
 # Create shortcut variable for easy toolkit tests
 string(TOUPPER ${wxBUILD_TOOLKIT} toolkit_upper)
@@ -55,9 +64,13 @@ elseif(wxBUILD_TOOLKIT MATCHES "qt")
 endif()
 
 set(wxTOOLKIT_DEFINITIONS __WX${toolkit_upper}__)
+if(WXUNIV)
+    list(APPEND wxTOOLKIT_DEFINITIONS __WXUNIVERSAL__)
+endif()
 
 if(NOT wxUSE_GUI)
     set(wxBUILD_TOOLKIT "base")
+    set(wxBUILD_WIDGETSET "")
     string(TOUPPER ${wxBUILD_TOOLKIT} toolkit_upper)
     set(WX${toolkit_upper} ON)
     set(wxTOOLKIT_DEFINITIONS __WX${toolkit_upper}__)
@@ -122,6 +135,11 @@ if(UNIX AND NOT APPLE AND NOT WIN32 AND (WXX11 OR WXMOTIF OR (WXGTK AND wxHAVE_G
     find_package(X11 REQUIRED)
     list(APPEND wxTOOLKIT_INCLUDE_DIRS ${X11_INCLUDE_DIR})
     list(APPEND wxTOOLKIT_LIBRARIES ${X11_LIBRARIES})
+endif()
+
+if(WXHAIKU)
+    # libbe and friends; the C++ runtime comes with the compiler driver
+    list(APPEND wxTOOLKIT_LIBRARIES be translation tracker)
 endif()
 
 if(WXQT)

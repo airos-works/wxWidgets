@@ -281,7 +281,16 @@ wxString wxCallStrftime(const wxString& format, const tm* tm)
     // http://sourceforge.net/tracker/?func=detail&atid=102435&aid=1046059&group_id=2435
     wxString s;
 
+#ifdef __HAIKU__
+    // Haiku's strftime() crashes on %x and %X with some locales (HaikuPorts
+    // carries the same change): use the fixed formats instead.
+    wxString formatHaiku(format);
+    formatHaiku.Replace(wxS("%x"), wxS("%D"));
+    formatHaiku.Replace(wxS("%X"), wxS("%T"));
+    if ( !wxStrftime(buf, WXSIZEOF(buf), formatHaiku, tm) )
+#else
     if ( !wxStrftime(buf, WXSIZEOF(buf), format, tm) )
+#endif
     {
         // There is one special case in which strftime() can return 0 without
         // indicating an error: "%p" may give empty string depending on the

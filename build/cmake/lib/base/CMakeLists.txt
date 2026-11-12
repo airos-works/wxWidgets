@@ -70,6 +70,9 @@ if(APPLE)
             "-framework QuartzCore"
         )
     endif()
+elseif(HAIKU)
+    # dlopen() is in libroot; sockets and the resolver in libnetwork
+    wx_lib_link_libraries(wxbase PUBLIC network)
 elseif(UNIX)
     wx_lib_link_libraries(wxbase PRIVATE dl)
 endif()

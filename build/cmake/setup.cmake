@@ -232,6 +232,10 @@ endmacro()
 
 # the following tests are for Unix(like) systems only
 if(UNIX)
+    if(HAIKU)
+        # the socket functions live in libnetwork
+        list(APPEND CMAKE_REQUIRED_LIBRARIES network)
+    endif()
     if(wxUSE_LIBICONV)
         set(HAVE_ICONV ON)
         set(ICONV_CONST " ")
@@ -324,9 +328,16 @@ if(UNIX)
             statfs(\"/\", &fs);"
             HAVE_STATFS_DECL)
     else()
-        # TODO: implement statvfs checks
+        check_symbol_exists(statvfs sys/statvfs.h HAVE_STATVFS)
         if(HAVE_STATVFS)
-            set(WX_STATFS_T statvfs_t)
+            wx_check_cxx_source_compiles(
+                "statvfs_t fs; statvfs(\"/\", &fs);"
+                HAVE_STATVFS_T sys/statvfs.h)
+            if(HAVE_STATVFS_T)
+                set(WX_STATFS_T statvfs_t)
+            else()
+                set(WX_STATFS_T "struct statvfs")
+            endif()
         endif()
     endif()
 
@@ -611,7 +622,10 @@ if(wxUSE_DATETIME)
 endif()
 
 cmake_push_check_state(RESET)
-set(CMAKE_REQUIRED_LIBRARIES dl)
+if(NOT HAIKU)
+    # Haiku has dlopen() in libroot and no libdl
+    set(CMAKE_REQUIRED_LIBRARIES dl)
+endif()
 check_symbol_exists(dlopen dlfcn.h HAVE_DLOPEN)
 cmake_pop_check_state()
 if(HAVE_DLOPEN)
@@ -631,8 +645,13 @@ check_include_file(sys/select.h HAVE_SYS_SELECT_H)
 
 if(wxUSE_FSWATCHER)
     check_include_file(sys/inotify.h wxHAS_INOTIFY)
-    if(NOT wxHAS_INOTIFY)
+    if(NOT wxHAS_INOTIFY AND NOT HAIKU)
+        # Haiku's kqueue() has no EVFILT_VNODE
         check_include_file(sys/event.h wxHAS_KQUEUE)
+    endif()
+    if(UNIX AND NOT wxHAS_INOTIFY AND NOT wxHAS_KQUEUE)
+        message(STATUS "neither inotify nor kqueue: wxFileSystemWatcher disabled")
+        wx_option_force_value(wxUSE_FSWATCHER OFF)
     endif()
 endif()
 
@@ -644,6 +663,13 @@ if(wxUSE_XLOCALE)
     endif()
     check_type_size(locale_t LOCALE_T)
     set(CMAKE_EXTRA_INCLUDE_FILES)
+    if(HAVE_LOCALE_T)
+        # locale_t without the strtod_l() family (Haiku) is of no use to us
+        check_symbol_exists(strtod_l "stdlib.h;locale.h" HAVE_STRTOD_L)
+        if(NOT HAVE_STRTOD_L)
+            set(HAVE_LOCALE_T OFF)
+        endif()
+    endif()
 endif()
 
 # Check size and availability of various types
