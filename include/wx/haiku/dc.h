@@ -99,6 +99,23 @@ public:
     bool HaikuBeginRawDraw(bool applyClip = true);
     void HaikuEndRawDraw();
 
+    // coordinate conversion helpers: logical to view coordinates
+    wxCoord XV(wxCoord x) const { return LogicalToDeviceX(x) + m_offset.x; }
+    wxCoord YV(wxCoord y) const { return LogicalToDeviceY(y) + m_offset.y; }
+    wxCoord WV(wxCoord w) const { return LogicalToDeviceXRel(w); }
+    wxCoord HV(wxCoord h) const { return LogicalToDeviceYRel(h); }
+
+    // logical coordinates of this DC to coordinates of the view, for code
+    // drawing on the view directly between HaikuBeginRawDraw() and
+    // HaikuEndRawDraw(). Such code must leave the state of the view as it
+    // found it (PushState()/PopState()) except for the colours, drawing
+    // mode, pen size, line mode and font, which the DC sets before it uses
+    // them.
+    wxPoint HaikuToView(const wxPoint& pt) const
+        { return wxPoint(XV(pt.x), YV(pt.y)); }
+    wxRect HaikuToView(const wxRect& r) const
+        { return wxRect(XV(r.x), YV(r.y), WV(r.width), HV(r.height)); }
+
     // the bitmap to read the pixels of this DC from (memory and screen DCs)
     // and the position of the device origin in it; NULL if not readable
     virtual const wxBitmap *HaikuGetSourceBitmap(wxPoint *origin) const;
@@ -205,12 +222,6 @@ protected:
     // fills the whole target with a colour which is not opaque, replacing
     // (not blending with) what is there; returns false if not possible
     virtual bool HaikuClearTranslucent(const wxColour& colour);
-
-    // coordinate conversion helpers: logical to view coordinates
-    wxCoord XV(wxCoord x) const { return LogicalToDeviceX(x) + m_offset.x; }
-    wxCoord YV(wxCoord y) const { return LogicalToDeviceY(y) + m_offset.y; }
-    wxCoord WV(wxCoord w) const { return LogicalToDeviceXRel(w); }
-    wxCoord HV(wxCoord h) const { return LogicalToDeviceYRel(h); }
 
     BView *m_view;
     wxPoint m_offset;
