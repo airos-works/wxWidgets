@@ -92,30 +92,32 @@ class wxHaikuViewLock
 {
 public:
     explicit wxHaikuViewLock(BView *view)
-        : m_view(view), m_locked(false)
+        : m_view(view), m_looper(NULL)
     {
-        if ( m_view && m_view->Window() )
-            m_locked = m_view->LockLooper();
+        // Remember the looper: the view may be removed from its window while
+        // the lock is held (RemoveSelf()) and has no looper to unlock then.
+        if ( m_view && m_view->Window() && m_view->LockLooper() )
+            m_looper = m_view->Looper();
     }
 
     ~wxHaikuViewLock()
     {
-        if ( m_locked )
-            m_view->UnlockLooper();
+        if ( m_looper )
+            m_looper->Unlock();
     }
 
     // the view is attached to a window and its looper is locked
-    bool IsLocked() const { return m_locked; }
+    bool IsLocked() const { return m_looper != NULL; }
 
     // the view may be manipulated: it is locked or not attached at all
     bool CanTouch() const
     {
-        return m_view && (m_locked || !m_view->Window());
+        return m_view && (m_looper || !m_view->Window());
     }
 
 private:
     BView *m_view;
-    bool m_locked;
+    BLooper *m_looper;
 
     wxDECLARE_NO_COPY_CLASS(wxHaikuViewLock);
 };
