@@ -25,7 +25,7 @@
 
 /*  the raw keyboard codes are generated under wxGTK and wxMSW only */
 #if defined(__WXGTK__) || defined(__WXMSW__) || defined(__WXMAC__) \
-    || defined(__WXDFB__)
+    || defined(__WXDFB__) || defined(__WXHAIKU__)
     #define wxHAS_RAW_KEY_CODES
 #else
     #undef wxHAS_RAW_KEY_CODES
@@ -63,7 +63,7 @@
 
 /* Pango-based ports and wxDFB use UTF-8 for text and font encodings
  * internally and so their fonts can handle any encodings: */
-#if wxUSE_PANGO || defined(__WXDFB__)
+#if wxUSE_PANGO || defined(__WXDFB__) || defined(__WXHAIKU__)
     #define wxHAS_UTF8_FONTS
 #endif
 
@@ -85,7 +85,7 @@
 
 /* Direct access to bitmap data is not implemented in all ports yet */
 #if defined(__WXGTK20__) || defined(__WXMAC__) || defined(__WXDFB__) || \
-        defined(__WXMSW__) || defined(__WXQT__)
+        defined(__WXMSW__) || defined(__WXQT__) || defined(__WXHAIKU__)
 
     /*
        HP aCC for PA-RISC can't deal with templates in wx/rawbmp.h.

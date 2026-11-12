@@ -187,6 +187,12 @@ typedef wxPixelFormat<unsigned char, 24, 0, 1, 2> wxImagePixelFormat;
     typedef wxPixelFormat<unsigned char, 24, 2, 1, 0> wxNativePixelFormat;
 
     #define wxPIXEL_FORMAT_ALPHA 3
+#elif defined(__WXHAIKU__)
+    // All bitmaps are B_RGBA32: 4 bytes per pixel in B, G, R, A order, alpha
+    // not premultiplied; the alpha byte of opaque bitmaps is ignored.
+    typedef wxPixelFormat<unsigned char, 32, 2, 1, 0> wxNativePixelFormat;
+
+    #define wxPIXEL_FORMAT_ALPHA 3
 #elif defined(__WXQT__)
     typedef wxPixelFormat<unsigned char, 24, 0, 1, 2> wxNativePixelFormat;
 

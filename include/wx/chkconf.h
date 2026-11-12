@@ -1296,6 +1296,8 @@
 #  include "wx/osx/chkconf.h"
 #elif defined(__WXDFB__)
 #  include "wx/dfb/chkconf.h"
+#elif defined(__WXHAIKU__)
+#  include "wx/haiku/chkconf.h"
 #elif defined(__WXMOTIF__)
 #  include "wx/motif/chkconf.h"
 #elif defined(__WXX11__)

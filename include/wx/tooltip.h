@@ -27,6 +27,8 @@
 #include "wx/osx/tooltip.h"
 #elif defined(__WXQT__)
 #include "wx/qt/tooltip.h"
+#elif defined(__WXHAIKU__)
+#include "wx/haiku/tooltip.h"
 #endif
 
 #endif

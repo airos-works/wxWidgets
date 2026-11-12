@@ -64,6 +64,9 @@ public:
 #elif defined(__WXDFB__)
     #define wxCURSOR_DEFAULT_TYPE   wxBITMAP_TYPE_CUR_RESOURCE
     #include "wx/dfb/cursor.h"
+#elif defined(__WXHAIKU__)
+    #define wxCURSOR_DEFAULT_TYPE   wxBITMAP_TYPE_CUR
+    #include "wx/haiku/cursor.h"
 #elif defined(__WXMAC__)
     #define wxCURSOR_DEFAULT_TYPE   wxBITMAP_TYPE_MACCURSOR_RESOURCE
     #include "wx/osx/cursor.h"

@@ -79,6 +79,8 @@ public:
     #include "wx/gtk1/brush.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/brush.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/brush.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/brush.h"
 #elif defined(__WXQT__)

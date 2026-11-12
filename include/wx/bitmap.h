@@ -69,6 +69,7 @@ protected:
 };
 
 #if defined(__WXDFB__) || \
+    defined(__WXHAIKU__) || \
     defined(__WXMAC__) || \
     defined(__WXGTK__) || \
     defined(__WXMOTIF__) || \
@@ -287,6 +288,9 @@ protected:
 #elif defined(__WXDFB__)
     #define wxBITMAP_DEFAULT_TYPE    wxBITMAP_TYPE_BMP_RESOURCE
     #include "wx/dfb/bitmap.h"
+#elif defined(__WXHAIKU__)
+    #define wxBITMAP_DEFAULT_TYPE    wxBITMAP_TYPE_PNG
+    #include "wx/haiku/bitmap.h"
 #elif defined(__WXMAC__)
     #define wxBITMAP_DEFAULT_TYPE    wxBITMAP_TYPE_PICT_RESOURCE
     #include "wx/osx/bitmap.h"

@@ -161,7 +161,7 @@ void wxRadioButton::DoDraw(wxControlRenderer *renderer)
 
     renderer->GetRenderer()->
         DrawRadioButton(dc,
-                        GetLabel(),
+                        UnivGetLabel(),
                         GetBitmap(GetState(flags), status),
                         renderer->GetRect(),
                         flags,

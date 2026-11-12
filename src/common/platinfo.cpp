@@ -80,7 +80,8 @@ static const wxChar* const wxPortIdNames[] =
     wxT("wxMac"),
     wxT("wxCocoa"),
     wxT("Unknown"),
-    wxT("wxQT")
+    wxT("wxQT"),
+    wxT("wxHaiku")
 };
 
 static const wxChar* const wxBitnessNames[] =

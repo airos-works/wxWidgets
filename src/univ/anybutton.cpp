@@ -94,7 +94,7 @@ wxSize wxAnyButton::DoGetBestClientSize() const
 {
     wxClientDC dc(wxConstCast(this, wxAnyButton));
     wxCoord width, height;
-    dc.GetMultiLineTextExtent(GetLabel(), &width, &height);
+    dc.GetMultiLineTextExtent(UnivGetLabel(), &width, &height);
 
     if ( m_bitmap.IsOk() )
     {

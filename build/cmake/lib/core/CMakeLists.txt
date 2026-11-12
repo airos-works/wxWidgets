@@ -55,6 +55,11 @@ elseif(WXQT)
     if(WIN32)
         wx_append_sources(CORE_SRC QT_WIN32)
     endif()
+elseif(WXHAIKU)
+    # the low level layer on the Be API, the controls are wxUniversal's
+    wx_append_sources(CORE_SRC HAIKU_LOWLEVEL)
+    wx_append_sources(CORE_SRC UNIV)
+    wx_append_sources(CORE_SRC UNIV_THEMES)
 endif()
 
 wx_add_library(wxcore ${CORE_SRC})

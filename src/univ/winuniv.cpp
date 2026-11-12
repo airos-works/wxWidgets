@@ -94,6 +94,8 @@ public:
     wxIMPLEMENT_DYNAMIC_CLASS(wxWindow, wxWindowMac);
 #elif defined(__WXDFB__)
     wxIMPLEMENT_DYNAMIC_CLASS(wxWindow, wxWindowDFB);
+#elif defined(__WXHAIKU__)
+    wxIMPLEMENT_DYNAMIC_CLASS(wxWindow, wxWindowHaiku);
 #elif defined(__WXX11__)
     wxIMPLEMENT_DYNAMIC_CLASS(wxWindow, wxWindowX11);
 #endif
@@ -1061,7 +1063,7 @@ void wxWindow::ScrollWindow(int dx, int dy, const wxRect *rect)
 {
     // use native scrolling when available and do it in generic way
     // otherwise:
-#ifdef __WXX11__
+#if defined(__WXX11__) || defined(__WXHAIKU__)
 
     wxWindowNative::ScrollWindow(dx, dy, rect);
 

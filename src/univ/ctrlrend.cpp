@@ -69,10 +69,12 @@ void wxControlRenderer::DrawLabel()
     m_dc.SetFont(m_window->GetFont());
     m_dc.SetTextForeground(m_window->GetForegroundColour());
 
-    wxString label = m_window->GetLabel();
+    wxControl *ctrl = wxStaticCast(m_window, wxControl);
+
+    // the label without the mnemonic marker, which is drawn as an underline
+    wxString label = ctrl->UnivGetLabel();
     if ( !label.empty() )
     {
-        wxControl *ctrl = wxStaticCast(m_window, wxControl);
 
         m_renderer->DrawLabel(m_dc,
                               label,
@@ -90,7 +92,9 @@ void wxControlRenderer::DrawButtonLabel(const wxBitmap& bitmap,
     m_dc.SetFont(m_window->GetFont());
     m_dc.SetTextForeground(m_window->GetForegroundColour());
 
-    wxString label = m_window->GetLabel();
+    wxControl *ctrl = wxStaticCast(m_window, wxControl);
+
+    wxString label = ctrl->UnivGetLabel();
     if ( !label.empty() || bitmap.IsOk() )
     {
         wxRect rectLabel = m_rect;
@@ -98,8 +102,6 @@ void wxControlRenderer::DrawButtonLabel(const wxBitmap& bitmap,
         {
             rectLabel.Inflate(-marginX, -marginY);
         }
-
-        wxControl *ctrl = wxStaticCast(m_window, wxControl);
 
         m_renderer->DrawButtonLabel(m_dc,
                                     label,
@@ -120,7 +122,7 @@ void wxControlRenderer::DrawFrame()
     wxControl *ctrl = wxStaticCast(m_window, wxControl);
 
     m_renderer->DrawFrame(m_dc,
-                          m_window->GetLabel(),
+                          ctrl->UnivGetLabel(),
                           m_rect,
                           m_window->GetStateFlags(),
                           ctrl->GetAlignment(),

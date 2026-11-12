@@ -78,6 +78,12 @@
     #include "wx/dfb/dcscreen.h"
 #endif
 
+#ifdef __WXHAIKU__
+    #include "wx/haiku/dcclient.h"
+    #include "wx/haiku/dcmemory.h"
+    #include "wx/haiku/dcscreen.h"
+#endif
+
 #ifdef __WXQT__
     #include "wx/qt/dcclient.h"
     #include "wx/qt/dcmemory.h"

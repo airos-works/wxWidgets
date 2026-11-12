@@ -1,0 +1,1060 @@
+/////////////////////////////////////////////////////////////////////////////
+// Name:        src/haiku/nonownedwnd.cpp
+// Purpose:     wxNonOwnedWindow: a window with its own BWindow; keyboard
+//              input translation
+// Copyright:   (c) 2026 air/OS project
+// Licence:     wxWindows licence
+/////////////////////////////////////////////////////////////////////////////
+
+// for compilers that support precompilation, includes "wx.h".
+#include "wx/wxprec.h"
+
+#ifndef WX_PRECOMP
+    #include "wx/toplevel.h"
+    #include "wx/app.h"
+    #include "wx/log.h"
+    #include "wx/dialog.h"
+#endif
+
+#include "wx/nonownedwnd.h"
+#include "wx/popupwin.h"
+#include "wx/evtloop.h"
+
+#include "wx/haiku/private.h"
+
+#include <InterfaceDefs.h>
+#include <Screen.h>
+
+// implemented in window.cpp
+void wxHaikuKillFocus();
+wxWindowHaiku *wxHaikuGetFocusWindow();
+
+namespace
+{
+
+// position of the next window created without one
+int gs_cascade = 0;
+
+// ----------------------------------------------------------------------------
+// key translation
+// ----------------------------------------------------------------------------
+
+// key codes of the numeric keypad (see the keymap documentation)
+enum
+{
+    KEY_NUMPAD_DIVIDE = 0x23,
+    KEY_NUMPAD_MULTIPLY = 0x24,
+    KEY_NUMPAD_SUBTRACT = 0x25,
+    KEY_NUMPAD_7 = 0x37,
+    KEY_NUMPAD_8 = 0x38,
+    KEY_NUMPAD_9 = 0x39,
+    KEY_NUMPAD_ADD = 0x3a,
+    KEY_NUMPAD_4 = 0x48,
+    KEY_NUMPAD_5 = 0x49,
+    KEY_NUMPAD_6 = 0x4a,
+    KEY_NUMPAD_1 = 0x58,
+    KEY_NUMPAD_2 = 0x59,
+    KEY_NUMPAD_3 = 0x5a,
+    KEY_NUMPAD_ENTER = 0x5b,
+    KEY_NUMPAD_0 = 0x64,
+    KEY_NUMPAD_DECIMAL = 0x65,
+    KEY_MENU = 0x68
+};
+
+// decodes the first UTF-8 character of the string
+wxUint32 DecodeUTF8(const char *s, size_t len)
+{
+    if ( !len )
+        return 0;
+
+    const unsigned char c = (unsigned char)s[0];
+    if ( c < 0x80 )
+        return c;
+
+    int extra;
+    wxUint32 code;
+    if ( (c & 0xe0) == 0xc0 )
+    {
+        extra = 1;
+        code = c & 0x1f;
+    }
+    else if ( (c & 0xf0) == 0xe0 )
+    {
+        extra = 2;
+        code = c & 0x0f;
+    }
+    else if ( (c & 0xf8) == 0xf0 )
+    {
+        extra = 3;
+        code = c & 0x07;
+    }
+    else
+    {
+        return 0;
+    }
+
+    if ( len < (size_t)extra + 1 )
+        return 0;
+
+    for ( int n = 1; n <= extra; n++ )
+        code = (code << 6) | ((unsigned char)s[n] & 0x3f);
+
+    return code;
+}
+
+// the wx key code of the numeric keypad key or 0
+int NumpadKeyCode(const wxHaikuEvent& he)
+{
+    const bool digit = he.numBytes == 1 && he.bytes[0] >= '0' && he.bytes[0] <= '9';
+
+    switch ( he.key )
+    {
+        case KEY_NUMPAD_DIVIDE:   return WXK_NUMPAD_DIVIDE;
+        case KEY_NUMPAD_MULTIPLY: return WXK_NUMPAD_MULTIPLY;
+        case KEY_NUMPAD_SUBTRACT: return WXK_NUMPAD_SUBTRACT;
+        case KEY_NUMPAD_ADD:      return WXK_NUMPAD_ADD;
+        case KEY_NUMPAD_ENTER:    return WXK_NUMPAD_ENTER;
+
+        case KEY_NUMPAD_0: return digit ? WXK_NUMPAD0 : WXK_NUMPAD_INSERT;
+        case KEY_NUMPAD_1: return digit ? WXK_NUMPAD1 : WXK_NUMPAD_END;
+        case KEY_NUMPAD_2: return digit ? WXK_NUMPAD2 : WXK_NUMPAD_DOWN;
+        case KEY_NUMPAD_3: return digit ? WXK_NUMPAD3 : WXK_NUMPAD_PAGEDOWN;
+        case KEY_NUMPAD_4: return digit ? WXK_NUMPAD4 : WXK_NUMPAD_LEFT;
+        case KEY_NUMPAD_5: return digit ? WXK_NUMPAD5 : WXK_NUMPAD_BEGIN;
+        case KEY_NUMPAD_6: return digit ? WXK_NUMPAD6 : WXK_NUMPAD_RIGHT;
+        case KEY_NUMPAD_7: return digit ? WXK_NUMPAD7 : WXK_NUMPAD_HOME;
+        case KEY_NUMPAD_8: return digit ? WXK_NUMPAD8 : WXK_NUMPAD_UP;
+        case KEY_NUMPAD_9: return digit ? WXK_NUMPAD9 : WXK_NUMPAD_PAGEUP;
+
+        case KEY_NUMPAD_DECIMAL:
+            return he.numBytes == 1 && he.bytes[0] == B_DELETE
+                    ? WXK_NUMPAD_DELETE : WXK_NUMPAD_DECIMAL;
+    }
+
+    return 0;
+}
+
+// the wx key code of a key which does not generate a character or 0
+int SpecialKeyCode(const wxHaikuEvent& he)
+{
+    if ( he.key == KEY_MENU )
+        return WXK_MENU;
+
+    // raw_char is the character of the key without any modifiers: unlike
+    // "bytes" it cannot be confused with the control characters Control
+    // makes of the letters
+    int32 raw = he.rawChar;
+    if ( !raw && he.numBytes == 1 )
+        raw = (unsigned char)he.bytes[0];
+
+    switch ( raw )
+    {
+        case B_BACKSPACE:   return WXK_BACK;
+        case B_TAB:         return WXK_TAB;
+        case B_ENTER:       return WXK_RETURN;
+        case B_ESCAPE:      return WXK_ESCAPE;
+        case B_LEFT_ARROW:  return WXK_LEFT;
+        case B_RIGHT_ARROW: return WXK_RIGHT;
+        case B_UP_ARROW:    return WXK_UP;
+        case B_DOWN_ARROW:  return WXK_DOWN;
+        case B_INSERT:      return WXK_INSERT;
+        case B_DELETE:      return WXK_DELETE;
+        case B_HOME:        return WXK_HOME;
+        case B_END:         return WXK_END;
+        case B_PAGE_UP:     return WXK_PAGEUP;
+        case B_PAGE_DOWN:   return WXK_PAGEDOWN;
+
+        case B_FUNCTION_KEY:
+            if ( he.key >= B_F1_KEY && he.key <= B_F12_KEY )
+                return WXK_F1 + (he.key - B_F1_KEY);
+
+            switch ( he.key )
+            {
+                case B_PRINT_KEY:  return WXK_PRINT;
+                case B_SCROLL_KEY: return WXK_SCROLL;
+                case B_PAUSE_KEY:  return WXK_PAUSE;
+            }
+            break;
+    }
+
+    return 0;
+}
+
+void FillKeyState(wxKeyEvent& event, int32 modifiers)
+{
+    const int mods = wxHaikuModifiers(modifiers);
+    event.m_controlDown = (mods & wxMOD_CONTROL) != 0;
+    event.m_shiftDown = (mods & wxMOD_SHIFT) != 0;
+    event.m_altDown = (mods & wxMOD_ALT) != 0;
+    event.m_metaDown = (mods & wxMOD_META) != 0;
+}
+
+} // anonymous namespace
+
+bool wxHaikuTranslateKey(const wxHaikuEvent& he, wxKeyEvent& event,
+                         wxChar *unicode)
+{
+    FillKeyState(event, he.modifiers);
+    event.SetTimestamp((long)(he.when / 1000));
+    event.m_rawCode = he.key;
+    event.m_rawFlags = he.modifiers;
+
+    if ( unicode )
+        *unicode = 0;
+
+    int code = NumpadKeyCode(he);
+    if ( code )
+    {
+        // the digits and operators of the keypad are characters too
+        if ( unicode && he.numBytes == 1
+                && (unsigned char)he.bytes[0] >= 0x20
+                && he.bytes[0] != B_DELETE )
+        {
+            *unicode = he.bytes[0];
+        }
+
+        event.m_keyCode = code;
+        event.m_uniChar = unicode && *unicode ? *unicode : 0;
+        return true;
+    }
+
+    code = SpecialKeyCode(he);
+    if ( code )
+    {
+        event.m_keyCode = code;
+        // the control characters wx knows as characters
+        switch ( code )
+        {
+            case WXK_BACK:
+            case WXK_TAB:
+            case WXK_RETURN:
+            case WXK_ESCAPE:
+            case WXK_DELETE:
+                event.m_uniChar = code;
+                break;
+
+            default:
+                event.m_uniChar = 0;
+        }
+        return true;
+    }
+
+    // a key generating a character: the key code is the unmodified
+    // character of the key, upper case for the letters
+    wxUint32 raw = he.rawChar;
+    if ( raw >= 0x80 )
+    {
+        // raw_char is a UTF-8 lead byte for the keys of non Latin layouts
+        raw = 0;
+    }
+
+    const wxUint32 ch = DecodeUTF8(he.bytes, he.numBytes);
+
+    if ( raw >= 'a' && raw <= 'z' )
+        code = raw - 'a' + 'A';
+    else if ( raw >= 0x20 && raw < 0x7f )
+        code = raw;
+    else if ( ch >= 0x20 && ch < 0x100 && ch != 0x7f )
+        code = ch;
+    else
+        code = WXK_NONE;
+
+    if ( code == WXK_NONE && ch < 0x20 )
+        return false;
+
+    event.m_keyCode = code;
+    event.m_uniChar = code != WXK_NONE ? code : ch;
+
+    if ( unicode && ch >= 0x20 && ch != 0x7f )
+        *unicode = ch;
+
+    return true;
+}
+
+// ============================================================================
+// wxNonOwnedWindow
+// ============================================================================
+
+wxIMPLEMENT_ABSTRACT_CLASS(wxNonOwnedWindow, wxNonOwnedWindowBase);
+
+void wxNonOwnedWindow::Init()
+{
+    m_window = NULL;
+    m_decoLeft = m_decoTop = m_decoRight = m_decoBottom = 0;
+    m_decoValid = false;
+    m_lastFocus = NULL;
+    m_frameSyncPending = 0;
+    m_isModal = false;
+    m_isActive = false;
+    m_windowShown = false;
+    m_sizeEventSent = false;
+
+    m_isShown = false;
+}
+
+bool wxNonOwnedWindow::Create(wxWindow *parent,
+                              wxWindowID id,
+                              const wxPoint& pos,
+                              const wxSize& size,
+                              long style,
+                              const wxString& name)
+{
+    wxCHECK_MSG( be_app, false, "wxApp must be initialized first" );
+
+    m_tlw = this;
+
+    if ( !CreateBase(parent, id, pos, size, style, wxDefaultValidator, name) )
+        return false;
+
+    if ( parent )
+        parent->AddChild(this);
+
+    int look, feel;
+    wxUint32 flags;
+    HaikuGetWindowType(&look, &feel, &flags);
+
+    // The window is created somewhere and put in place below, when the size
+    // of its decorations is known.
+    const int w = wxMax(size.x == wxDefaultCoord ? 400 : size.x, 1),
+              h = wxMax(size.y == wxDefaultCoord ? 300 : size.y, 1);
+
+    wxHaikuWindow * const
+        window = new wxHaikuWindow(m_handle, wxHaikuRect(100, 100, w, h), "",
+                                   (window_look)look, (window_feel)feel, flags);
+    m_window = window;
+
+    // the root view follows the window: app_server resizes it together with
+    // the window, before wx hears about it
+    m_view = new wxHaikuView(m_handle, window->Bounds(), B_FOLLOW_ALL);
+    window->AddChild(m_view);
+
+    // A new BWindow is locked by the thread which created it until it runs:
+    // start the looper now, the window stays hidden until Show().
+    window->Run();
+
+    m_content = wxRect(100, 100, w, h);
+    m_rect = wxRect(0, 0, w, h);
+
+    HaikuUpdateDecorationInsets();
+
+    wxPoint position(pos);
+    if ( position.x == wxDefaultCoord || position.y == wxDefaultCoord )
+    {
+        // cascade the windows which don't care where they are
+        const int offset = 40 + (gs_cascade++ % 10) * 24;
+        if ( position.x == wxDefaultCoord )
+            position.x = offset;
+        if ( position.y == wxDefaultCoord )
+            position.y = offset + 20;
+    }
+
+    HaikuSetContentRect(wxRect(position.x + m_decoLeft, position.y + m_decoTop,
+                               wxMax(w - m_decoLeft - m_decoRight, 1),
+                               wxMax(h - m_decoTop - m_decoBottom, 1)));
+
+    return true;
+}
+
+wxNonOwnedWindow::~wxNonOwnedWindow()
+{
+    SendDestroyEvent();
+
+    // children first: their views are removed from the window
+    DestroyChildren();
+
+    if ( m_window )
+    {
+        // Quit() needs the lock and waits for the looper thread to end; the
+        // looper never waits for this thread, so this cannot deadlock. The
+        // root view is deleted with the window.
+        if ( m_window->Lock() )
+            m_window->Quit();
+
+        m_window = NULL;
+        m_view = NULL;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// window type
+// ----------------------------------------------------------------------------
+
+void wxNonOwnedWindow::HaikuGetWindowType(int *look, int *feel,
+                                          wxUint32 *flags) const
+{
+    *look = B_NO_BORDER_WINDOW_LOOK;
+    *feel = B_NORMAL_WINDOW_FEEL;
+    *flags = B_ASYNCHRONOUS_CONTROLS | B_WILL_ACCEPT_FIRST_CLICK;
+}
+
+void wxNonOwnedWindow::HaikuUpdateWindowType()
+{
+    if ( !m_window )
+        return;
+
+    int look, feel;
+    wxUint32 flags;
+    HaikuGetWindowType(&look, &feel, &flags);
+
+    if ( m_isModal )
+        feel = B_MODAL_APP_WINDOW_FEEL;
+
+    wxHaikuWindowLock lock(m_window);
+    if ( !lock.IsLocked() )
+        return;
+
+    bool lookChanged = false;
+    if ( m_window->Look() != (window_look)look )
+    {
+        m_window->SetLook((window_look)look);
+        lookChanged = true;
+    }
+
+    if ( m_window->Feel() != (window_feel)feel )
+        m_window->SetFeel((window_feel)feel);
+
+    if ( m_window->Flags() != flags )
+        m_window->SetFlags(flags);
+
+    if ( lookChanged )
+    {
+        // the decorations changed: keep the outer rectangle
+        const wxRect outer(m_content.x - m_decoLeft, m_content.y - m_decoTop,
+                           m_content.width + m_decoLeft + m_decoRight,
+                           m_content.height + m_decoTop + m_decoBottom);
+
+        HaikuUpdateDecorationInsets();
+
+        HaikuSetContentRect(wxRect(outer.x + m_decoLeft, outer.y + m_decoTop,
+                                   wxMax(outer.width - m_decoLeft - m_decoRight, 1),
+                                   wxMax(outer.height - m_decoTop - m_decoBottom, 1)));
+    }
+}
+
+void wxNonOwnedWindow::HaikuUpdateDecorationInsets()
+{
+    m_decoLeft = m_decoTop = m_decoRight = m_decoBottom = 0;
+    m_decoValid = true;
+
+    if ( !m_window )
+        return;
+
+    wxHaikuWindowLock lock(m_window);
+    if ( !lock.IsLocked() )
+        return;
+
+    if ( m_window->Look() == B_NO_BORDER_WINDOW_LOOK )
+        return;
+
+    const BRect frame = m_window->Frame();
+    const BRect deco = m_window->DecoratorFrame();
+    if ( !deco.IsValid() || !deco.Contains(frame) )
+        return;
+
+    m_decoLeft = (int)(frame.left - deco.left);
+    m_decoTop = (int)(frame.top - deco.top);
+    m_decoRight = (int)(deco.right - frame.right);
+    m_decoBottom = (int)(deco.bottom - frame.bottom);
+}
+
+void wxNonOwnedWindow::HaikuGetDecorationInsets(int *left, int *top,
+                                                int *right, int *bottom) const
+{
+    if ( left )
+        *left = m_decoLeft;
+    if ( top )
+        *top = m_decoTop;
+    if ( right )
+        *right = m_decoRight;
+    if ( bottom )
+        *bottom = m_decoBottom;
+}
+
+void wxNonOwnedWindow::HaikuSetModal(bool modal)
+{
+    if ( modal == m_isModal )
+        return;
+
+    m_isModal = modal;
+    HaikuUpdateWindowType();
+}
+
+// ----------------------------------------------------------------------------
+// geometry
+// ----------------------------------------------------------------------------
+
+wxPoint wxNonOwnedWindow::HaikuGetContentOrigin() const
+{
+    return m_content.GetPosition();
+}
+
+void wxNonOwnedWindow::DoGetPosition(int *x, int *y) const
+{
+    if ( x )
+        *x = m_content.x - m_decoLeft;
+    if ( y )
+        *y = m_content.y - m_decoTop;
+}
+
+void wxNonOwnedWindow::DoGetSize(int *width, int *height) const
+{
+    if ( width )
+        *width = m_content.width + m_decoLeft + m_decoRight;
+    if ( height )
+        *height = m_content.height + m_decoTop + m_decoBottom;
+}
+
+void wxNonOwnedWindow::DoGetClientSize(int *width, int *height) const
+{
+    if ( width )
+        *width = m_content.width;
+    if ( height )
+        *height = m_content.height;
+}
+
+void wxNonOwnedWindow::DoSetClientSize(int width, int height)
+{
+    HaikuSetContentRect(wxRect(m_content.x, m_content.y,
+                               wxMax(width, 1), wxMax(height, 1)));
+}
+
+void wxNonOwnedWindow::DoSetSize(int x, int y, int width, int height,
+                                 int sizeFlags)
+{
+    int curX, curY, curW, curH;
+    DoGetPosition(&curX, &curY);
+    DoGetSize(&curW, &curH);
+
+    if ( x == wxDefaultCoord && !(sizeFlags & wxSIZE_ALLOW_MINUS_ONE) )
+        x = curX;
+    if ( y == wxDefaultCoord && !(sizeFlags & wxSIZE_ALLOW_MINUS_ONE) )
+        y = curY;
+
+    wxSize best(wxDefaultCoord, wxDefaultCoord);
+    if ( width == wxDefaultCoord )
+    {
+        if ( sizeFlags & wxSIZE_AUTO_WIDTH )
+        {
+            best = DoGetBestSize();
+            width = best.x;
+        }
+        else
+        {
+            width = curW;
+        }
+    }
+
+    if ( height == wxDefaultCoord )
+    {
+        if ( sizeFlags & wxSIZE_AUTO_HEIGHT )
+        {
+            if ( best.y == wxDefaultCoord )
+                best = DoGetBestSize();
+            height = best.y;
+        }
+        else
+        {
+            height = curH;
+        }
+    }
+
+    const int maxWidth = GetMaxWidth(),
+              minWidth = GetMinWidth(),
+              maxHeight = GetMaxHeight(),
+              minHeight = GetMinHeight();
+
+    if ( minWidth != wxDefaultCoord && width < minWidth )
+        width = minWidth;
+    if ( maxWidth != wxDefaultCoord && width > maxWidth )
+        width = maxWidth;
+    if ( minHeight != wxDefaultCoord && height < minHeight )
+        height = minHeight;
+    if ( maxHeight != wxDefaultCoord && height > maxHeight )
+        height = maxHeight;
+
+    if ( x == curX && y == curY && width == curW && height == curH )
+        return;
+
+    DoMoveWindow(x, y, width, height);
+}
+
+void wxNonOwnedWindow::DoMoveWindow(int x, int y, int width, int height)
+{
+    // the rectangle includes the decorations
+    HaikuSetContentRect(wxRect(x + m_decoLeft, y + m_decoTop,
+                               wxMax(width - m_decoLeft - m_decoRight, 1),
+                               wxMax(height - m_decoTop - m_decoBottom, 1)));
+}
+
+void wxNonOwnedWindow::HaikuSetContentRect(const wxRect& content)
+{
+    if ( !m_window )
+        return;
+
+    wxRect actual(content);
+
+    {
+        wxHaikuWindowLock lock(m_window);
+        if ( !lock.IsLocked() )
+            return;
+
+        const BRect frame = m_window->Frame();
+        const wxRect current = wxFromHaikuRect(frame);
+
+        if ( current.GetPosition() != content.GetPosition() )
+            m_window->MoveTo(content.x, content.y);
+        if ( current.GetSize() != content.GetSize() )
+            m_window->ResizeTo(content.width - 1, content.height - 1);
+
+        // Both calls are synchronous: this is what the window got (the size
+        // limits may have changed what was asked for).
+        actual = wxFromHaikuRect(m_window->Frame());
+
+        // The looper will report these changes too, after the reports of
+        // what the user did before: they are all out of date by the time
+        // they arrive. Ignore the frame reports until the looper gets this
+        // message, which is queued behind them.
+        if ( actual != current )
+        {
+            m_frameSyncPending++;
+            m_window->PostMessage(wxHAIKU_MSG_FRAME_SYNC);
+        }
+    }
+
+    HaikuFrameChanged(actual);
+}
+
+void wxNonOwnedWindow::HaikuFrameChanged(const wxRect& content)
+{
+    const bool moved = content.GetPosition() != m_content.GetPosition();
+    const bool resized = content.GetSize() != m_content.GetSize();
+
+    if ( !moved && !resized && m_sizeEventSent )
+        return;
+
+    m_content = content;
+    m_rect = wxRect(0, 0, content.width, content.height);
+
+    const wxUint32 handle = m_handle;
+
+    if ( resized || !m_sizeEventSent )
+    {
+        m_sizeEventSent = true;
+
+        wxSizeEvent event(GetSize(), GetId());
+        event.SetEventObject(this);
+        HandleWindowEvent(event);
+
+        if ( HaikuFindByHandle(handle) != this )
+            return;
+    }
+
+    if ( moved )
+    {
+        wxMoveEvent event(GetPosition(), GetId());
+        event.SetEventObject(this);
+        HandleWindowEvent(event);
+    }
+}
+
+void wxNonOwnedWindow::DoSetSizeHints(int minW, int minH,
+                                      int maxW, int maxH,
+                                      int incW, int incH)
+{
+    wxNonOwnedWindowBase::DoSetSizeHints(minW, minH, maxW, maxH, incW, incH);
+
+    if ( !m_window )
+        return;
+
+    wxHaikuWindowLock lock(m_window);
+    if ( !lock.IsLocked() )
+        return;
+
+    // the limits of the BWindow are those of its content, and a width of n
+    // pixels is n - 1 in the Be API
+    const int decoW = m_decoLeft + m_decoRight,
+              decoH = m_decoTop + m_decoBottom;
+
+    const float minWidth = minW > 0 ? wxMax(minW - decoW, 1) - 1 : 0,
+                minHeight = minH > 0 ? wxMax(minH - decoH, 1) - 1 : 0,
+                maxWidth = maxW > 0 ? wxMax(maxW - decoW, 1) - 1 : 32767,
+                maxHeight = maxH > 0 ? wxMax(maxH - decoH, 1) - 1 : 32767;
+
+    m_window->SetSizeLimits(minWidth, maxWidth, minHeight, maxHeight);
+}
+
+// ----------------------------------------------------------------------------
+// showing
+// ----------------------------------------------------------------------------
+
+bool wxNonOwnedWindow::Show(bool show)
+{
+    // this is the base class implementation, the window of wxWindowHaiku has
+    // no view to show or hide by itself
+    if ( !wxWindowBase::Show(show) )
+        return false;
+
+    if ( !m_window )
+        return true;
+
+    if ( show && !m_sizeEventSent )
+    {
+        // the first size event: lays out the window before it appears
+        m_sizeEventSent = true;
+
+        wxSizeEvent event(GetSize(), GetId());
+        event.SetEventObject(this);
+        HandleWindowEvent(event);
+    }
+
+    if ( !show )
+    {
+        // a hidden window has neither the mouse nor the focus
+        wxWindowHaiku * const focus = wxHaikuGetFocusWindow();
+        if ( focus && focus->GetTLW() == this )
+            wxHaikuKillFocus();
+    }
+
+    wxHaikuWindowLock lock(m_window);
+    if ( lock.IsLocked() && show != m_windowShown )
+    {
+        if ( show )
+            m_window->Show();
+        else
+            m_window->Hide();
+        m_windowShown = show;
+    }
+
+    return true;
+}
+
+void wxNonOwnedWindow::Raise()
+{
+    if ( !m_window )
+        return;
+
+    wxHaikuWindowLock lock(m_window);
+    if ( lock.IsLocked() )
+    {
+        if ( HaikuAvoidsFocus() )
+            m_window->SendBehind(NULL);
+        else
+            m_window->Activate(true);
+    }
+}
+
+void wxNonOwnedWindow::Lower()
+{
+    if ( !m_window )
+        return;
+
+    wxHaikuWindowLock lock(m_window);
+    if ( !lock.IsLocked() )
+        return;
+
+    // behind all the other windows of the application
+    BWindow *last = NULL;
+    for ( int32 i = 0; BWindow *window = be_app->WindowAt(i); i++ )
+    {
+        if ( window != m_window && !window->IsHidden() && !window->IsOffscreenWindow() )
+            last = window;
+    }
+
+    if ( last )
+        m_window->SendBehind(last);
+}
+
+static void wxHaikuUpdateModalWindows()
+{
+    // A shown and enabled top level window while others are disabled is
+    // shown modally (wxWindowDisabler disabled the others for it): it gets
+    // the modal feel which keeps it above the windows it blocks.
+    bool anyDisabled = false;
+    for ( wxWindowList::compatibility_iterator
+            node = wxTopLevelWindows.GetFirst();
+          node;
+          node = node->GetNext() )
+    {
+        wxWindow * const win = node->GetData();
+        if ( win->IsShown() && !win->IsThisEnabled() )
+        {
+            anyDisabled = true;
+            break;
+        }
+    }
+
+    for ( wxWindowList::compatibility_iterator
+            node = wxTopLevelWindows.GetFirst();
+          node;
+          node = node->GetNext() )
+    {
+        wxNonOwnedWindow * const
+            win = wxDynamicCast(node->GetData(), wxNonOwnedWindow);
+        if ( !win )
+            continue;
+
+        win->HaikuSetModal(anyDisabled && win->IsShown()
+                            && win->IsThisEnabled()
+                            && wxDynamicCast(win, wxDialog) != NULL);
+    }
+}
+
+void wxNonOwnedWindow::DoEnable(bool WXUNUSED(enable))
+{
+    wxHaikuUpdateModalWindows();
+}
+
+// ----------------------------------------------------------------------------
+// activation
+// ----------------------------------------------------------------------------
+
+void wxNonOwnedWindow::HaikuActivated(bool WXUNUSED(active))
+{
+}
+
+// ----------------------------------------------------------------------------
+// keyboard
+// ----------------------------------------------------------------------------
+
+void wxNonOwnedWindow::HaikuHandleKey(const wxHaikuEvent& he)
+{
+    // the window with the wx focus gets the keys, whatever BWindow they were
+    // sent to: the windows of popups never are the active ones
+    wxHaikuSetCurrentModifiers(he.modifiers);
+
+    wxWindowHaiku *target = wxHaikuGetFocusWindow();
+    if ( !target )
+        target = this;
+
+    if ( !target->IsEnabled() )
+        return;
+
+    wxWindow * const win = static_cast<wxWindow *>(target);
+    const wxUint32 handle = target->GetHaikuHandle();
+
+    wxKeyEvent event(he.type == wxHAIKU_EVT_KEY_DOWN ? wxEVT_KEY_DOWN
+                                                     : wxEVT_KEY_UP);
+    event.SetEventObject(win);
+    event.SetId(win->GetId());
+
+    wxChar unicode = 0;
+    if ( !wxHaikuTranslateKey(he, event, &unicode) )
+        return;
+
+    const wxPoint pos = win->ScreenToClient(wxHaikuCurrentMousePosition());
+    event.m_x = pos.x;
+    event.m_y = pos.y;
+
+    if ( he.type == wxHAIKU_EVT_KEY_UP )
+    {
+        win->HandleWindowEvent(event);
+        return;
+    }
+
+    // wxEVT_CHAR_HOOK first: the dialogs handle Escape and such there
+    {
+        wxKeyEvent eventHook(wxEVT_CHAR_HOOK, event);
+        if ( win->HandleWindowEvent(eventHook)
+                && !eventHook.IsNextEventAllowed() )
+        {
+            return;
+        }
+
+        if ( HaikuFindByHandle(handle) != target )
+            return;
+    }
+
+    // wxUniv looks for the accelerators when the key event is not handled
+    if ( win->HandleWindowEvent(event) )
+        return;
+
+    if ( HaikuFindByHandle(handle) != target )
+        return;
+
+    const int keyDown = event.m_keyCode;
+
+    // wxEVT_CHAR: the character the key generates, or the same code for the
+    // keys which don't generate any
+    bool sendChar = true;
+    wxKeyEvent eventChar(wxEVT_CHAR, event);
+
+    if ( unicode )
+    {
+        if ( event.m_controlDown || event.m_altDown )
+        {
+            // not text: Ctrl-letter is the control character as in the
+            // other ports
+            if ( keyDown >= 'A' && keyDown <= 'Z' && event.m_controlDown
+                    && !event.m_altDown )
+            {
+                eventChar.m_keyCode = keyDown - 'A' + 1;
+                eventChar.m_uniChar = eventChar.m_keyCode;
+            }
+            else
+            {
+                eventChar.m_keyCode = keyDown;
+                eventChar.m_uniChar = keyDown != WXK_NONE ? keyDown : unicode;
+            }
+        }
+        else
+        {
+            eventChar.m_uniChar = unicode;
+            eventChar.m_keyCode = unicode < 0x100 ? (int)unicode : WXK_NONE;
+
+            // Option makes other characters of the keys: it is not a
+            // modifier of the character itself
+            eventChar.m_metaDown = false;
+        }
+    }
+    else if ( keyDown == WXK_NONE || keyDown == WXK_MENU )
+    {
+        sendChar = false;
+    }
+    else if ( keyDown >= 0x20 && keyDown < WXK_START && keyDown != WXK_DELETE )
+    {
+        // a character key which generated nothing (a dead key)
+        sendChar = event.m_controlDown || event.m_altDown;
+        if ( keyDown >= 'A' && keyDown <= 'Z' && event.m_controlDown
+                && !event.m_altDown )
+        {
+            eventChar.m_keyCode = keyDown - 'A' + 1;
+            eventChar.m_uniChar = eventChar.m_keyCode;
+        }
+    }
+
+    if ( sendChar && win->HandleWindowEvent(eventChar) )
+        return;
+
+    if ( HaikuFindByHandle(handle) != target )
+        return;
+
+    // keyboard navigation
+    if ( keyDown == WXK_TAB && !event.m_altDown )
+    {
+        wxWindow * const parent = win->GetParent();
+        if ( parent && parent->HasFlag(wxTAB_TRAVERSAL) )
+        {
+            wxNavigationKeyEvent navEvent;
+            navEvent.SetEventObject(parent);
+            navEvent.SetDirection(!event.m_shiftDown);
+            navEvent.SetWindowChange(event.m_controlDown);
+            navEvent.SetCurrentFocus(win);
+            if ( parent->HandleWindowEvent(navEvent) )
+                return;
+        }
+        else if ( win->IsTopLevel() )
+        {
+            win->Navigate(event.m_shiftDown ? wxNavigationKeyEvent::IsBackward
+                                            : wxNavigationKeyEvent::IsForward);
+            return;
+        }
+    }
+
+    // the shortcuts every native window has, unless the application uses
+    // the keys itself
+    if ( event.m_controlDown && !event.m_altDown && !event.m_shiftDown )
+    {
+        wxTopLevelWindow * const
+            tlw = wxDynamicCast(wxGetTopLevelParent(win), wxTopLevelWindow);
+        if ( keyDown == 'Q' )
+        {
+            if ( wxTheApp )
+                wxTheApp->HaikuQuitRequested();
+        }
+        else if ( keyDown == 'W' && tlw && tlw->HasFlag(wxCLOSE_BOX) )
+        {
+            tlw->Close();
+        }
+    }
+}
+
+void wxNonOwnedWindow::HaikuHandleModifiers(const wxHaikuEvent& he)
+{
+    // the modifier keys are keys too for wx
+    static const struct
+    {
+        int32 mask;
+        int keyCode;
+    } modifierKeys[] =
+    {
+        { B_SHIFT_KEY, WXK_SHIFT },
+        { B_COMMAND_KEY, WXK_CONTROL },
+        { B_CONTROL_KEY, WXK_ALT },
+        { B_OPTION_KEY, WXK_WINDOWS_LEFT },
+        { B_CAPS_LOCK, WXK_CAPITAL },
+        { B_NUM_LOCK, WXK_NUMLOCK },
+        { B_SCROLL_LOCK, WXK_SCROLL },
+    };
+
+    wxHaikuSetCurrentModifiers(he.modifiers);
+
+    wxWindowHaiku *target = wxHaikuGetFocusWindow();
+    if ( !target )
+        target = this;
+
+    if ( !target->IsEnabled() )
+        return;
+
+    wxWindow * const win = static_cast<wxWindow *>(target);
+    const wxUint32 handle = target->GetHaikuHandle();
+
+    const int32 changed = he.modifiers ^ he.value;
+    for ( size_t n = 0; n < WXSIZEOF(modifierKeys); n++ )
+    {
+        if ( !(changed & modifierKeys[n].mask) )
+            continue;
+
+        const bool down = (he.modifiers & modifierKeys[n].mask) != 0;
+
+        wxKeyEvent event(down ? wxEVT_KEY_DOWN : wxEVT_KEY_UP);
+        event.SetEventObject(win);
+        event.SetId(win->GetId());
+        event.SetTimestamp((long)(he.when / 1000));
+        FillKeyState(event, he.modifiers);
+        event.m_keyCode = modifierKeys[n].keyCode;
+        event.m_rawFlags = he.modifiers;
+
+        win->HandleWindowEvent(event);
+
+        if ( HaikuFindByHandle(handle) != target )
+            return;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// event records
+// ----------------------------------------------------------------------------
+
+void wxNonOwnedWindow::HaikuHandleEvent(const wxHaikuEvent& event)
+{
+    switch ( event.type )
+    {
+        case wxHAIKU_EVT_FRAME:
+            if ( event.flag )
+            {
+                // the answer to wxHAIKU_MSG_FRAME_SYNC
+                if ( m_frameSyncPending > 0 )
+                    m_frameSyncPending--;
+            }
+
+            if ( !m_frameSyncPending )
+                HaikuFrameChanged(wxFromHaikuRect(event.rect));
+            break;
+
+        case wxHAIKU_EVT_KEY_DOWN:
+        case wxHAIKU_EVT_KEY_UP:
+            HaikuHandleKey(event);
+            break;
+
+        case wxHAIKU_EVT_MODIFIERS:
+            HaikuHandleModifiers(event);
+            break;
+
+        case wxHAIKU_EVT_ACTIVATE:
+            HaikuActivated(event.flag);
+            break;
+
+        default:
+            wxNonOwnedWindowBase::HaikuHandleEvent(event);
+    }
+}

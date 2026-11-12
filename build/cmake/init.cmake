@@ -376,6 +376,27 @@ if(wxUSE_GUI)
         endif()
      endif()
 
+    # wxUniversal: the themes to build (setup.h has them for all ports)
+    if(WXUNIV)
+        set(wxUSE_ALL_THEMES OFF)
+        set(wxUSE_THEME_GTK OFF)
+        set(wxUSE_THEME_METAL OFF)
+        set(wxUSE_THEME_MONO OFF)
+        # the base of the other themes, the fallback if the port has none
+        set(wxUSE_THEME_WIN32 ON)
+    endif()
+
+    # WXHAIKU checks, match include/wx/haiku/chkconf.h
+    if(WXHAIKU)
+        wx_option_force_value(wxUSE_METAFILE OFF)
+        wx_option_force_value(wxUSE_JOYSTICK OFF)
+        wx_option_force_value(wxUSE_LIBSDL OFF)
+        wx_option_force_value(wxUSE_LIBMSPACK OFF)
+        wx_option_force_value(wxUSE_UIACTIONSIMULATOR OFF)
+        wx_option_force_value(wxUSE_DIALUP_MANAGER OFF)
+        wx_option_force_value(wxUSE_NATIVE_DATAVIEWCTRL OFF)
+    endif()
+
     # WXQT checks
     if(WXQT)
         wx_option_force_value(wxUSE_WEBVIEW OFF)

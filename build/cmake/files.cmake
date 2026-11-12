@@ -2268,6 +2268,68 @@ set(DFB_LOWLEVEL_HDR
     wx/dfb/wrapdfb.h
 )
 
+set(HAIKU_LOWLEVEL_SRC
+    src/generic/caret.cpp
+    src/generic/colour.cpp
+    src/generic/icon.cpp
+    src/generic/imaglist.cpp
+    src/generic/textmeasure.cpp
+    src/haiku/app.cpp
+    src/haiku/bitmap.cpp
+    src/haiku/brush.cpp
+    src/haiku/clipbrd.cpp
+    src/haiku/cursor.cpp
+    src/haiku/dataobj.cpp
+    src/haiku/dc.cpp
+    src/haiku/dcclient.cpp
+    src/haiku/dcmemory.cpp
+    src/haiku/dcscreen.cpp
+    src/haiku/dnd.cpp
+    src/haiku/evtloop.cpp
+    src/haiku/font.cpp
+    src/haiku/looper.cpp
+    src/haiku/nonownedwnd.cpp
+    src/haiku/pen.cpp
+    src/haiku/popupwin.cpp
+    src/haiku/region.cpp
+    src/haiku/settings.cpp
+    src/haiku/tooltip.cpp
+    src/haiku/toplevel.cpp
+    src/haiku/utils.cpp
+    src/haiku/window.cpp
+)
+
+set(HAIKU_LOWLEVEL_HDR
+    wx/generic/caret.h
+    wx/generic/colour.h
+    wx/generic/icon.h
+    wx/generic/imaglist.h
+    wx/haiku/app.h
+    wx/haiku/bitmap.h
+    wx/haiku/brush.h
+    wx/haiku/chkconf.h
+    wx/haiku/clipbrd.h
+    wx/haiku/cursor.h
+    wx/haiku/dataform.h
+    wx/haiku/dataobj.h
+    wx/haiku/dataobj2.h
+    wx/haiku/dc.h
+    wx/haiku/dcclient.h
+    wx/haiku/dcmemory.h
+    wx/haiku/dcscreen.h
+    wx/haiku/dnd.h
+    wx/haiku/evtloop.h
+    wx/haiku/font.h
+    wx/haiku/nonownedwnd.h
+    wx/haiku/pen.h
+    wx/haiku/popupwin.h
+    wx/haiku/private.h
+    wx/haiku/region.h
+    wx/haiku/tooltip.h
+    wx/haiku/toplevel.h
+    wx/haiku/window.h
+)
+
 set(OSX_LOWLEVEL_SRC
     # Shared wxMac and wxCocoa files
     #TODO:     <if cond="PLATFORM_MACOSX=='1'">

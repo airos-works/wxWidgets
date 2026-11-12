@@ -96,6 +96,8 @@ protected:
 
 #if defined(__WXDFB__)
     #include "wx/dfb/nonownedwnd.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/nonownedwnd.h"
 #elif defined(__WXGTK20__)
     #include "wx/gtk/nonownedwnd.h"
 #elif defined(__WXMAC__)

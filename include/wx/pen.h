@@ -109,6 +109,8 @@ public:
     #include "wx/gtk1/pen.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/pen.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/pen.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/pen.h"
 #elif defined(__WXQT__)

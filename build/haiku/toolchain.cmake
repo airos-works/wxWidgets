@@ -50,3 +50,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
+# Haiku executables are position independent and linked like shared objects:
+# -fPIE is not enough for them
+set(CMAKE_C_FLAGS_INIT "-fPIC")
+set(CMAKE_CXX_FLAGS_INIT "-fPIC")

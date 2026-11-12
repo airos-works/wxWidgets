@@ -224,6 +224,8 @@ protected:
     #include "wx/osx/dnd.h"
 #elif defined(__WXQT__)
     #include "wx/qt/dnd.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/dnd.h"
 #endif
 
 // ----------------------------------------------------------------------------

@@ -201,7 +201,7 @@ enum wxEllipsizeMode
 #ifdef wxHAS_IMAGES_IN_RESOURCES
     // Load from a resource
     #define wxICON(X) wxIcon(wxT(#X))
-#elif defined(__WXDFB__)
+#elif defined(__WXDFB__) || defined(__WXHAIKU__)
     // Initialize from an included XPM
     #define wxICON(X) wxIcon( X##_xpm )
 #elif defined(__WXGTK__)
@@ -234,7 +234,8 @@ enum wxEllipsizeMode
       defined(__WXMOTIF__) || \
       defined(__WXX11__)   || \
       defined(__WXMAC__)   || \
-      defined(__WXDFB__)
+      defined(__WXDFB__)   || \
+      defined(__WXHAIKU__)
     // Initialize from an included XPM
     #define wxBITMAP(name) wxBitmap(name##_xpm)
 #else // other platforms

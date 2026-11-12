@@ -225,7 +225,7 @@ private:
     wxDECLARE_NO_COPY_CLASS(wxEventLoopBase);
 };
 
-#if defined(__WINDOWS__) || defined(__WXMAC__) || defined(__WXDFB__) || (defined(__UNIX__) && !defined(__WXOSX__))
+#if defined(__WINDOWS__) || defined(__WXMAC__) || defined(__WXDFB__) || defined(__WXHAIKU__) || (defined(__UNIX__) && !defined(__WXOSX__))
 
 // this class can be used to implement a standard event loop logic using
 // Pending() and Dispatch()
@@ -294,6 +294,8 @@ private:
     #include "wx/osx/evtloop.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/evtloop.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/evtloop.h"
 #elif defined(__WXGTK20__)
     #include "wx/gtk/evtloop.h"
 #elif defined(__WXQT__)

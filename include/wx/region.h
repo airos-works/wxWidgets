@@ -220,6 +220,8 @@ protected:
     #include "wx/x11/region.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/region.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/region.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/region.h"
 #elif defined(__WXQT__)

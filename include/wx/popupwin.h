@@ -72,6 +72,8 @@ public:
     #include "wx/motif/popupwin.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/popupwin.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/popupwin.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/popupwin.h"
 #elif defined(__WXQT__)

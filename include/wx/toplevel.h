@@ -369,6 +369,9 @@ protected:
 #elif defined(__WXDFB__)
     #include "wx/dfb/toplevel.h"
     #define wxTopLevelWindowNative wxTopLevelWindowDFB
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/toplevel.h"
+    #define wxTopLevelWindowNative wxTopLevelWindowHaiku
 #elif defined(__WXMAC__)
     #include "wx/osx/toplevel.h"
     #define wxTopLevelWindowNative wxTopLevelWindowMac

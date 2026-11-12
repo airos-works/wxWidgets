@@ -41,7 +41,7 @@
 #elif defined(__WXX11__)
   #define wxICON_DEFAULT_TYPE   wxBITMAP_TYPE_XPM
   #include "wx/generic/icon.h"
-#elif defined(__WXDFB__)
+#elif defined(__WXDFB__) || defined(__WXHAIKU__)
   #define wxICON_DEFAULT_TYPE   wxBITMAP_TYPE_XPM
   #include "wx/generic/icon.h"
 #elif defined(__WXMAC__)

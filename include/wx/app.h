@@ -729,6 +729,8 @@ protected:
     #include "wx/motif/app.h"
 #elif defined(__WXDFB__)
     #include "wx/dfb/app.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/app.h"
 #elif defined(__WXGTK20__)
     #include "wx/gtk/app.h"
 #elif defined(__WXGTK__)

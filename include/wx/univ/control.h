@@ -73,6 +73,10 @@ public:
     // return the index of the accel char in the label or -1 if none
     int GetAccelIndex() const { return m_indexAccel; }
 
+    // return the label as it is drawn, i.e. without the mnemonic marker the
+    // string returned by GetLabel() has: GetAccelIndex() is an index into it
+    const wxString& UnivGetLabel() const { return m_label; }
+
     // return the accel char itself or 0 if none
     wxChar GetAccelChar() const
     {

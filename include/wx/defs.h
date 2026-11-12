@@ -55,6 +55,7 @@
          !defined(__WXOSX_IPHONE__)   && \
          !defined(__X__)       && \
          !defined(__WXDFB__)   && \
+         !defined(__WXHAIKU__) && \
          !defined(__WXX11__)   && \
          !defined(__WXQT__)    && \
           wxUSE_GUI
@@ -3009,6 +3010,16 @@ typedef struct _PangoFontDescription PangoFontDescription;
    something arbitrary */
 typedef const void* WXWidget;
 #endif /*  DFB */
+
+#ifdef __WXHAIKU__
+/* the BView of the window */
+#ifdef __cplusplus
+class BView;
+typedef BView* WXWidget;
+#else
+typedef void* WXWidget;
+#endif
+#endif /*  Haiku */
 
 #ifdef __WXQT__
 #include "wx/qt/defs.h"

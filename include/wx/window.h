@@ -2037,6 +2037,9 @@ inline void wxWindowBase::SetInitialBestSize(const wxSize& size)
 #elif defined(__WXDFB__)
     #define wxWindowNative wxWindowDFB
     #include "wx/dfb/window.h"
+#elif defined(__WXHAIKU__)
+    #define wxWindowNative wxWindowHaiku
+    #include "wx/haiku/window.h"
 #elif defined(__WXMAC__)
     #ifdef __WXUNIVERSAL__
         #define wxWindowNative wxWindowMac
