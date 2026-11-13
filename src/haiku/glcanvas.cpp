@@ -105,8 +105,11 @@ struct wxHaikuGLContextData
     BGLView *view;
     unsigned long options;
 
-    // the size of the view: the renderer was told
+    // the size of the canvas the context renders for
     wxSize size;
+
+    // the size of the view, which the renderer was told: see BufferSize()
+    wxSize bufferSize;
 
     // the canvas the context renders for
     const wxGLCanvas *canvas;
@@ -269,20 +272,34 @@ bool KitIsOk(unsigned long options)
     return gs_kit.ok;
 }
 
+// The size of the buffers for a canvas of the given size. Rows of whole
+// cache lines: this is what llvmpipe wants and what it tells the window
+// system layer of the classic kit, which (Mesa 22.0.5) creates the bitmap of
+// the colour buffer with rows of just the width nevertheless. With any other
+// width the frame is sheared and the renderer writes past the end of the
+// bitmap. The surplus columns are at the right, where nothing looks.
+wxSize BufferSize(const wxSize& size)
+{
+    return wxSize((size.x + 15) & ~15, size.y);
+}
+
 // The context renders for a canvas of this size from now on.
 void SetContextSize(wxHaikuGLContextData *context, const wxSize& size)
 {
-    if ( size == context->size )
+    context->size = size;
+
+    const wxSize bufferSize = BufferSize(size);
+    if ( bufferSize == context->bufferSize )
         return;
 
-    context->size = size;
+    context->bufferSize = bufferSize;
 
     // the view is in no window: there is nothing to lock
     BGLView * const view = context->view;
-    view->ResizeTo(size.x - 1, size.y - 1);
+    view->ResizeTo(bufferSize.x - 1, bufferSize.y - 1);
 
     // stores the size in the renderer, nothing else
-    view->BGLView::FrameResized(size.x - 1, size.y - 1);
+    view->BGLView::FrameResized(bufferSize.x - 1, bufferSize.y - 1);
 
     // the buffers are allocated when the context is made current
     if ( gs_current == context )
@@ -808,7 +825,6 @@ wxGLContext::wxGLContext(wxGLCanvas *win,
 
     int major = 0,
         minor = 0;
-    bool core = false;
 
     if ( attrs )
     {
@@ -826,10 +842,6 @@ wxGLContext::wxGLContext(wxGLCanvas *win,
                     minor = values[n + 1] - 1;
                     break;
 
-                case WX_GL_CORE_PROFILE:
-                    core = true;
-                    break;
-
                 case WX_GL_ES2:
                     // the kit only creates desktop OpenGL contexts
                     return;
@@ -840,16 +852,11 @@ wxGLContext::wxGLContext(wxGLCanvas *win,
         }
     }
 
-    // core profiles start with 3.2
-    if ( core && (major < 3 || (major == 3 && minor < 2)) )
-    {
-        major = 3;
-        minor = 2;
-    }
-
     // All contexts are what the kit makes them: the compatibility profile of
     // the highest version of the renderer, which has everything the core
-    // profile of the same version has.
+    // profile of the same version has. So the profile asked for does not
+    // matter and the version decides (without one, as in the attribute list
+    // of BambuStudio, a core profile request means nothing elsewhere either).
     if ( gs_kit.major < major
             || (gs_kit.major == major && gs_kit.minor < minor) )
     {
@@ -869,15 +876,16 @@ wxGLContext::wxGLContext(wxGLCanvas *win,
     if ( gs_spareView && !share && gs_spareOptions == options )
     {
         m_data->view = gs_spareView;
-        m_data->size = wxSize(16, 16);
+        m_data->bufferSize = wxSize(16, 16);
         gs_spareView = NULL;
 
         SetContextSize(m_data, size);
     }
     else
     {
-        m_data->view = CreateView(options, size, share);
+        m_data->view = CreateView(options, BufferSize(size), share);
         m_data->size = size;
+        m_data->bufferSize = BufferSize(size);
 
         if ( gs_spareView )
         {
@@ -1103,12 +1111,21 @@ void wxGLCanvas::HaikuShowFrame(const wxRect *rect)
     if ( !lock.IsLocked() )
         return;
 
-    // a wxDC may have drawn on the canvas and left its state in the view
+    // a wxDC or a wxGraphicsContext may have drawn on the canvas and left
+    // its state in the view
     wxHaikuDrawView * const view = dynamic_cast<wxHaikuDrawView *>(m_view);
-    if ( !view || view->m_stateOwner )
+    if ( !view || view->m_stateOwner || view->m_transformed )
     {
         if ( view )
+        {
             view->m_stateOwner = NULL;
+
+            if ( view->m_transformed )
+            {
+                m_view->SetTransform(BAffineTransform());
+                view->m_transformed = false;
+            }
+        }
 
         m_view->ConstrainClippingRegion(NULL);
         m_view->SetDrawingMode(B_OP_COPY);
