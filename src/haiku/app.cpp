@@ -108,6 +108,16 @@ public:
         wxHaikuPostEvent(event);
     }
 
+    virtual void DispatchMessage(BMessage *message, BHandler *handler)
+    {
+        // BApplication::DispatchMessage() passes B_COLORS_UPDATED on to the
+        // windows itself: MessageReceived() never sees it.
+        if ( message->what == B_COLORS_UPDATED )
+            wxHaikuPostEvent(new wxHaikuEvent(wxHAIKU_EVT_COLORS_UPDATED));
+
+        BApplication::DispatchMessage(message, handler);
+    }
+
     virtual void MessageReceived(BMessage *message)
     {
         switch ( message->what )
@@ -115,11 +125,6 @@ public:
             case kMsgReallyQuit:
                 m_reallyQuit = true;
                 Quit();
-                break;
-
-            case B_COLORS_UPDATED:
-                wxHaikuPostEvent(new wxHaikuEvent(wxHAIKU_EVT_COLORS_UPDATED));
-                BApplication::MessageReceived(message);
                 break;
 
             case B_FONTS_UPDATED:
