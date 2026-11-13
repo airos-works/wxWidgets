@@ -14,18 +14,24 @@
 // current for one canvas or another, keeping their state (BambuStudio renders
 // all its canvases with a single wxGLContext). So:
 //
-//  - A wxGLContext owns a BGLView which is never attached to a window. Its
-//    context is the wxGLContext, its buffers are what the context renders
-//    into. The view is resized to the canvas the context is made current for
-//    (the renderers allocate their buffers again when the context is made
-//    current after that; nothing happens while the size stays the same).
-//  - A wxGLCanvas is an ordinary wx window with an ordinary view. Its
-//    SwapBuffers() reads the back buffer of the context which rendered for
-//    it into a BBitmap (glReadPixels(), rows inverted by Mesa) and draws the
-//    bitmap on the view: one copy more than BGLView::SwapBuffers() needs with
-//    the software renderers, the same as it does itself with the others. The
-//    bitmap stays: an exposed canvas shows its last frame at once, before the
-//    program has rendered the next one.
+//  - A wxGLContext owns a BGLView (wxHaikuGLView): its context and the
+//    buffers it renders into. The view has the size of the canvas the
+//    context is current for (the renderers allocate their buffers again when
+//    the context is made current after a change of size).
+//  - A wxGLCanvas is an ordinary wx window with an ordinary view.
+//  - The direct path: the view of the context is a child of the view of the
+//    canvas it renders for, covering it, and wxGLCanvas::SwapBuffers() is
+//    BGLView::SwapBuffers(): the kit shows the frame as it does for any
+//    program. Making the context current for another canvas moves the view
+//    there.
+//  - The read back path: the view of the context is in no window and
+//    SwapBuffers() reads the back buffer into a BBitmap of the canvas
+//    (glReadPixels(), rows inverted by Mesa) and draws it. This is what
+//    happens while the context renders for several canvases which are on
+//    screen at the same time: the view cannot be in two places, and moving
+//    it would leave the other canvas empty. The bitmap stays, an exposed
+//    canvas shows its last frame at once. WXHAIKU_GL_READBACK=1 in the
+//    environment makes all contexts work like this.
 //  - Contexts share their objects if asked to (BGL_SHARE_CONTEXT, which
 //    shares with the context current when the view is created).
 //
@@ -34,36 +40,63 @@
 //
 // What the two implementations of the kit do (Mesa's src/hgl with BGLRenderer
 // add-ons in the x86_64 images, libglvnd on EGL in the arm64 ones):
-// BGLView::LockGL() takes fDisplayLock, a BLocker of the view, and makes the
-// context current for the calling thread; UnlockGL() leaves the thread
-// without context. No looper is locked by either. SwapBuffers(), Draw(),
-// AttachedToWindow() and FrameResized() are where they deal with the window
-// (locking its looper with a timeout from the rendering thread, drawing the
-// front buffer from the looper thread without any GL lock, posting
-// B_INVALIDATE to the view...) and none of them is ever used here:
+//
+//  - BGLView::LockGL() takes fDisplayLock, a BLocker of the view, and makes
+//    the context current for the calling thread; UnlockGL() leaves the
+//    thread without context. No looper is locked by either.
+//  - SwapBuffers() of the classic kit shows the frame from the calling
+//    thread: it locks the looper of the view (with a timeout of one second,
+//    the frame is dropped if it expires) and draws the bitmap of the frame.
+//    Its BGLView::Draw() draws the front buffer the same way but without any
+//    GL lock: called by a looper thread it races with the rendering thread.
+//  - SwapBuffers() of the libglvnd kit hands the frame to the view under a
+//    mutex nothing else is done under and posts B_INVALIDATE to it:
+//    BGLView::Draw() on the looper thread is what shows the frame.
+//  - AttachedToWindow() and FrameResized() store the size of the view in the
+//    renderer; AttachedToWindow() also makes the context current to set the
+//    viewport and leaves the thread without context.
+//
+// The rules of this file:
 //
 //  1. OpenGL belongs to the wx (main) thread. It is the only thread which
-//     calls LockGL(), UnlockGL() or any gl function, and it keeps the GL lock
-//     of the view whose context is current for as long as it is current,
-//     that is between frames too: wx knows no "release". MakeCurrent() is
-//     the only place which locks and unlocks.
-//  2. The views of the contexts have no window, hence no looper: no looper
-//     thread ever runs one of their hooks and nothing of the kit runs on a
-//     looper thread. The looper threads cannot want a GL lock.
-//  3. The view of a canvas is a wxHaikuView: its hooks post event records
-//     and never wait for the main thread. The main thread shows a frame as
-//     it paints any window: it locks the looper of the canvas and draws the
-//     bitmap, synchronously. It may hold a GL lock while it waits for the
-//     looper lock; the looper thread holding that lock never waits for the
-//     main thread, so there is no cycle.
-//  4. Resizing: wx resizes the view of the canvas. The view of the context
-//     which is current for it is resized by the main thread as well (it is
-//     not in a window: no lock) and BGLView::FrameResized() is called
-//     directly, which only stores the size in the renderer; making the
-//     context current again then gives the buffers their size before the
-//     next frame. No looper thread is involved.
-//  5. Creating a BGLView makes its context current behind the back of wx in
-//     the renderers of the classic kit: CreateView() restores what was.
+//     calls LockGL(), UnlockGL(), SwapBuffers() or any gl function, and it
+//     keeps the GL lock of the view whose context is current for as long as
+//     it is current, that is between frames too: wx knows no "release".
+//     MakeCurrent() is the only place which locks and unlocks.
+//  2. The looper threads never take a GL lock and never touch a renderer in
+//     a way which could wait for the main thread. The hooks of wxHaikuGLView
+//     (it has a looper only while it is the child of a canvas) post event
+//     records for the canvas as those of wxHaikuView do, and:
+//       - Draw() posts wxHAIKU_EVT_DRAW: wx renders the canvas again. It
+//         does not call BGLView::Draw() in the classic kit (the race above;
+//         the main thread shows the front buffer again when it gets the
+//         record). In the libglvnd kit it must, this being how frames get
+//         on the screen there, and can: only the frame mutex is taken.
+//       - FrameResized() does nothing: see rule 5.
+//       - AttachedToWindow() runs in the thread which calls AddChild(), the
+//         main thread.
+//     So a looper thread holding its looper lock never waits for a lock the
+//     main thread holds. The main thread may wait for a looper lock while it
+//     holds a GL lock (SwapBuffers() of the classic kit, drawing the frame
+//     bitmap, moving the view): there is no cycle, and the timeout of the
+//     kit cannot expire because the looper lock is only ever held for the
+//     time of a hook which does not block.
+//  3. The main thread does not hold a looper lock when it calls
+//     BGLView::SwapBuffers(): the libglvnd kit sends a message to the looper
+//     there, which blocks while the port of the looper is full, and a looper
+//     waiting for its own lock does not empty its port.
+//  4. Moving the view of a context between canvases (RemoveSelf(),
+//     AddChild()) is done by the main thread with the context current, under
+//     the looper lock of the window concerned; the handle its hooks post
+//     records with changes while the view is in no window.
+//  5. Resizing: only wx resizes views. The main thread resizes the view of
+//     the context with the canvas and calls BGLView::FrameResized() itself,
+//     which only stores the size in the renderer; making the context current
+//     again then gives the buffers their size before the next frame. The
+//     B_VIEW_RESIZED the looper gets later is ignored: it could only bring
+//     an older size back.
+//  6. Creating a BGLView and attaching it make its context current behind
+//     the back of wx: CreateView() and AttachView() restore what was.
 
 // for compilers that support precompilation, includes "wx.h".
 #include "wx/wxprec.h"
@@ -75,6 +108,7 @@
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
+    #include "wx/cursor.h"
     #include "wx/intl.h"
     #include "wx/log.h"
 #endif
@@ -83,12 +117,44 @@
 
 #include "wx/haiku/private.h"
 
+#include <Cursor.h>
 #include <GLView.h>
 #include <GL/glext.h>
+
+#include <dlfcn.h>
 
 #ifndef GL_PACK_INVERT_MESA
     #define GL_PACK_INVERT_MESA 0x8758
 #endif
+
+// ============================================================================
+// wxHaikuGLView: the view of a context
+// ============================================================================
+
+// Its hooks run on the looper thread of the window of the canvas the view is
+// the child of, except for AttachedToWindow(): see the rules above.
+class wxHaikuGLView : public BGLView
+{
+public:
+    wxHaikuGLView(BRect frame, unsigned long options);
+
+    virtual void AttachedToWindow();
+    virtual void Draw(BRect updateRect);
+    virtual void FrameResized(float newWidth, float newHeight);
+    virtual void MouseDown(BPoint where);
+    virtual void MouseUp(BPoint where);
+    virtual void MouseMoved(BPoint where, uint32 transit,
+                            const BMessage *dragMessage);
+    virtual void MessageReceived(BMessage *message);
+
+    // the handle of the canvas the view is the child of: set by the main
+    // thread while the view is in no window
+    wxUint32 m_handle;
+
+    // Set by the main thread before it swaps the buffers in the libglvnd
+    // kit: the Draw() this results in must not make wx render again.
+    int32 m_swapped;
+};
 
 // ============================================================================
 // contexts
@@ -98,11 +164,12 @@
 struct wxHaikuGLContextData
 {
     wxHaikuGLContextData()
-        : view(NULL), options(0), canvas(NULL), initialized(false)
+        : view(NULL), options(0), canvas(NULL), previous(NULL),
+          attached(false), frameShown(false), initialized(false)
     {
     }
 
-    BGLView *view;
+    wxHaikuGLView *view;
     unsigned long options;
 
     // the size of the canvas the context renders for
@@ -113,6 +180,15 @@ struct wxHaikuGLContextData
 
     // the canvas the context renders for
     const wxGLCanvas *canvas;
+
+    // the canvas it rendered for before, which may still be on screen
+    const wxGLCanvas *previous;
+
+    // the view is a child of the view of the canvas: the direct path
+    bool attached;
+
+    // and the kit has shown a frame since the buffers were allocated
+    bool frameShown;
 
     // the context was made current once
     bool initialized;
@@ -144,15 +220,47 @@ struct KitInfo
 
 KitInfo gs_kit;
 
+// all the contexts with a view
+std::vector<wxHaikuGLContextData *> gs_contexts;
+
 // the context whose GL lock the main thread holds, which is current
 wxHaikuGLContextData *gs_current = NULL;
 
+thread_id gs_mainThread = -1;
+
 // The view the kit was probed with if no context was created yet: it becomes
 // the view of the first context it suits.
-BGLView *gs_spareView = NULL;
+wxHaikuGLView *gs_spareView = NULL;
 unsigned long gs_spareOptions = 0;
 
 const unsigned long DEFAULT_OPTIONS = BGL_RGB | BGL_DOUBLE | BGL_DEPTH;
+
+// The classic kit has BGLRenderer, the class of its renderer add-ons, the
+// libglvnd one has not. This is what tells who shows the frames, see above.
+bool KitPresentsInDraw()
+{
+    static int s_presentsInDraw = -1;
+    if ( s_presentsInDraw == -1 )
+    {
+        s_presentsInDraw
+            = dlsym(RTLD_DEFAULT, "_ZN11BGLRenderer7ReleaseEv") == NULL;
+    }
+
+    return s_presentsInDraw == 1;
+}
+
+// WXHAIKU_GL_READBACK: never the direct path
+bool AlwaysReadBack()
+{
+    static int s_readBack = -1;
+    if ( s_readBack == -1 )
+    {
+        const char * const value = getenv("WXHAIKU_GL_READBACK");
+        s_readBack = value && *value && strcmp(value, "0") != 0;
+    }
+
+    return s_readBack == 1;
+}
 
 bool HasExtension(const char *name)
 {
@@ -190,10 +298,12 @@ void MakeCurrent(wxHaikuGLContextData *context)
 
 // Creates the view of a context, which shares its objects with the given
 // one. The current context stays what it is.
-BGLView *CreateView(unsigned long options, const wxSize& size,
-                    wxHaikuGLContextData *share)
+wxHaikuGLView *CreateView(unsigned long options, const wxSize& size,
+                          wxHaikuGLContextData *share)
 {
     wxCHECK_MSG( be_app, NULL, "OpenGL needs the application object" );
+
+    gs_mainThread = find_thread(NULL);
 
     wxHaikuGLContextData * const current = gs_current;
 
@@ -203,9 +313,8 @@ BGLView *CreateView(unsigned long options, const wxSize& size,
     if ( share )
         options |= BGL_SHARE_CONTEXT;
 
-    BGLView * const
-        view = new BGLView(BRect(0, 0, size.x - 1, size.y - 1), "wxGLContext",
-                           B_FOLLOW_NONE, 0, options);
+    wxHaikuGLView * const
+        view = new wxHaikuGLView(BRect(0, 0, size.x - 1, size.y - 1), options);
 
     // The renderers of the classic kit leave the new context current
     // without the lock. Unlocking any view of this kit leaves the thread
@@ -245,7 +354,7 @@ BGLView *CreateView(unsigned long options, const wxSize& size,
     return view;
 }
 
-void DeleteView(BGLView *view)
+void DeleteView(wxHaikuGLView *view)
 {
     // Without the application (a wxGLContext deleted after wxApp::CleanUp())
     // the renderer cannot free its bitmaps: the process ends anyway.
@@ -277,7 +386,8 @@ bool KitIsOk(unsigned long options)
 // system layer of the classic kit, which (Mesa 22.0.5) creates the bitmap of
 // the colour buffer with rows of just the width nevertheless. With any other
 // width the frame is sheared and the renderer writes past the end of the
-// bitmap. The surplus columns are at the right, where nothing looks.
+// bitmap. The surplus columns are at the right: where nothing looks, or
+// clipped by the view of the canvas.
 wxSize BufferSize(const wxSize& size)
 {
     return wxSize((size.x + 15) & ~15, size.y);
@@ -293,13 +403,21 @@ void SetContextSize(wxHaikuGLContextData *context, const wxSize& size)
         return;
 
     context->bufferSize = bufferSize;
+    context->frameShown = false;
 
-    // the view is in no window: there is nothing to lock
-    BGLView * const view = context->view;
-    view->ResizeTo(bufferSize.x - 1, bufferSize.y - 1);
+    wxHaikuGLView * const view = context->view;
+    {
+        // in a window only while it is the child of a canvas
+        wxHaikuViewLock lock(view);
+        if ( !lock.CanTouch() )
+            return;
 
-    // stores the size in the renderer, nothing else
-    view->BGLView::FrameResized(bufferSize.x - 1, bufferSize.y - 1);
+        view->ResizeTo(bufferSize.x - 1, bufferSize.y - 1);
+
+        // Not the hook of wxHaikuGLView, which ignores it. This stores the
+        // size in the renderer, nothing else.
+        view->BGLView::FrameResized(bufferSize.x - 1, bufferSize.y - 1);
+    }
 
     // the buffers are allocated when the context is made current
     if ( gs_current == context )
@@ -307,6 +425,64 @@ void SetContextSize(wxHaikuGLContextData *context, const wxSize& size)
         view->UnlockGL();
         view->LockGL();
     }
+}
+
+// The view of the context becomes the child of the view of the canvas, below
+// the children the canvas may have: the direct path.
+void AttachView(wxHaikuGLContextData *context, const wxGLCanvas *canvas)
+{
+    BView * const parent = canvas->GetHaikuView();
+    wxHaikuGLView * const view = context->view;
+    if ( context->attached || !parent )
+        return;
+
+    // BGLView::AttachedToWindow() locks GL, sets the viewport and unlocks:
+    // with the context current this changes nothing but the viewport, which
+    // the program does not expect to change.
+    wxHaikuGLContextData * const current = gs_current;
+    MakeCurrent(context);
+
+    GLint viewport[4] = { 0, 0, context->size.x, context->size.y };
+    glGetIntegerv(GL_VIEWPORT, viewport);
+
+    view->m_handle = canvas->GetHaikuHandle();
+    view->MoveTo(0, 0);
+
+    {
+        wxHaikuViewLock lock(parent);
+        if ( lock.CanTouch() )
+        {
+            parent->AddChild(view, parent->ChildAt(0));
+            context->attached = true;
+        }
+    }
+
+    glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
+
+    MakeCurrent(current);
+
+    context->frameShown = false;
+
+    if ( context->attached )
+        canvas->HaikuGLViewAttached(view);
+}
+
+// The view of the context is in no window any more: the read back path.
+void DetachView(wxHaikuGLContextData *context)
+{
+    if ( !context->attached )
+        return;
+
+    wxHaikuGLView * const view = context->view;
+    {
+        wxHaikuViewLock lock(view);
+        if ( lock.CanTouch() )
+            view->RemoveSelf();
+    }
+
+    view->m_handle = 0;
+    context->attached = false;
+    context->frameShown = false;
 }
 
 // Reads the back buffer of the context, which is current, into the bitmap
@@ -395,6 +571,8 @@ void ReadFrame(wxHaikuGLContextData *context, BBitmap *bitmap)
 // the context does not render for its canvas any more
 void Detach(wxHaikuGLContextData *context)
 {
+    DetachView(context);
+
     if ( context->canvas )
     {
         context->canvas->HaikuSetContextData(NULL);
@@ -797,6 +975,95 @@ void wxGLAttributes::AddDefaultsForWXBefore31()
 }
 
 // ============================================================================
+// wxHaikuGLView
+// ============================================================================
+
+// The name starts with "wx" as those of all the views of wx windows do (the
+// keys go to wx while such a view is the focus view; this one never is).
+wxHaikuGLView::wxHaikuGLView(BRect frame, unsigned long options)
+    : BGLView(frame, "wxGLContext", B_FOLLOW_NONE,
+              B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE, options),
+      m_handle(0),
+      m_swapped(0)
+{
+    // BGLView insists on following all sides of its parent, wx moves and
+    // resizes all views itself
+    SetResizingMode(B_FOLLOW_NONE);
+    SetViewColor(B_TRANSPARENT_COLOR);
+    SetLowColor(0, 0, 0);
+}
+
+void wxHaikuGLView::AttachedToWindow()
+{
+    BGLView::AttachedToWindow();
+
+    // BGLView wants a black background, which app_server would then fill
+    // every exposed part with before wx renders it again
+    SetViewColor(B_TRANSPARENT_COLOR);
+
+    // AttachView() has the context of this view current, which then still
+    // is. When a parent of the canvas is put into a window it is not and no
+    // context is current any more: restore the one which was.
+    if ( find_thread(NULL) == gs_mainThread
+            && gs_current && gs_current->view != this )
+    {
+        gs_current->view->UnlockGL();
+        gs_current->view->LockGL();
+    }
+}
+
+void wxHaikuGLView::Draw(BRect updateRect)
+{
+    if ( KitPresentsInDraw() )
+    {
+        // shows the last frame
+        BGLView::Draw(updateRect);
+
+        // which is all there is to do if this is the update a swap asked for
+        if ( atomic_get_and_set(&m_swapped, 0) )
+            return;
+    }
+
+    // wx renders the canvas again when it gets to it
+    wxHaikuEvent *event = new wxHaikuEvent(wxHAIKU_EVT_DRAW, m_handle);
+    event->rect = updateRect;
+    wxHaikuPostEvent(event);
+}
+
+void wxHaikuGLView::FrameResized(float WXUNUSED(newWidth),
+                                 float WXUNUSED(newHeight))
+{
+    // the main thread told the renderer when it resized the view
+}
+
+void wxHaikuGLView::MouseDown(BPoint where)
+{
+    // keep getting the moves and the release when the pointer leaves the view
+    // with the button down
+    SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
+
+    wxHaikuPostMouseEvent(this, m_handle, wxHAIKU_EVT_MOUSE_DOWN, where);
+}
+
+void wxHaikuGLView::MouseUp(BPoint where)
+{
+    wxHaikuPostMouseEvent(this, m_handle, wxHAIKU_EVT_MOUSE_UP, where);
+}
+
+void wxHaikuGLView::MouseMoved(BPoint where, uint32 transit,
+                               const BMessage *dragMessage)
+{
+    wxHaikuPostMouseEvent(this, m_handle, wxHAIKU_EVT_MOUSE_MOVED, where,
+                          transit, dragMessage);
+}
+
+void wxHaikuGLView::MessageReceived(BMessage *message)
+{
+    if ( !wxHaikuHandleViewMessage(this, m_handle, message) )
+        BGLView::MessageReceived(message);
+}
+
+// ============================================================================
 // wxGLContext
 // ============================================================================
 
@@ -897,17 +1164,31 @@ wxGLContext::wxGLContext(wxGLCanvas *win,
 
     m_data->options = options;
 
-    m_isOk = m_data->view != NULL;
+    if ( m_data->view )
+    {
+        gs_contexts.push_back(m_data);
+        m_isOk = true;
+    }
 }
 
 wxGLContext::~wxGLContext()
 {
     if ( m_data->view )
     {
+        Detach(m_data);
+
         if ( gs_current == m_data )
             MakeCurrent(NULL);
 
-        Detach(m_data);
+        for ( size_t n = 0; n < gs_contexts.size(); n++ )
+        {
+            if ( gs_contexts[n] == m_data )
+            {
+                gs_contexts.erase(gs_contexts.begin() + n);
+                break;
+            }
+        }
+
         DeleteView(m_data->view);
     }
 
@@ -920,21 +1201,44 @@ bool wxGLContext::SetCurrent(const wxGLCanvas& win) const
     if ( !context->view )
         return false;
 
-    if ( context->canvas != &win )
-    {
-        Detach(context);
-
-        // another context rendered for this canvas
-        if ( win.HaikuGetContextData() )
-            Detach(win.HaikuGetContextData());
-
-        context->canvas = &win;
-        win.HaikuSetContextData(context);
-    }
-
     wxSize size = win.HaikuGetViewSize();
     size.IncTo(wxSize(1, 1));
-    SetContextSize(context, size);
+
+    if ( context->canvas != &win || !context->attached )
+    {
+        if ( context->canvas != &win )
+        {
+            // The view leaves the canvas it was in, which gets its own view
+            // exposed and renders again if it is on screen.
+            const wxGLCanvas * const old = context->canvas;
+            Detach(context);
+            if ( old )
+                context->previous = old;
+
+            // another context rendered for this canvas
+            if ( win.HaikuGetContextData() )
+                Detach(win.HaikuGetContextData());
+
+            context->canvas = &win;
+            win.HaikuSetContextData(context);
+        }
+
+        SetContextSize(context, size);
+
+        // The view of the context goes into the canvas unless the canvas
+        // the context rendered for before is on screen too: the context
+        // probably goes on rendering for both then, and its view cannot be
+        // in both.
+        const bool direct = !AlwaysReadBack()
+            && (!context->previous || context->previous == &win
+                    || !context->previous->IsShownOnScreen());
+        if ( direct )
+            AttachView(context, &win);
+    }
+    else
+    {
+        SetContextSize(context, size);
+    }
 
     MakeCurrent(context);
 
@@ -1053,10 +1357,62 @@ bool wxGLCanvas::Create(wxWindow *parent,
 
 wxGLCanvas::~wxGLCanvas()
 {
+    for ( size_t n = 0; n < gs_contexts.size(); n++ )
+    {
+        if ( gs_contexts[n]->previous == this )
+            gs_contexts[n]->previous = NULL;
+    }
+
+    // takes the view of the context out of ours, which the base class deletes
     if ( m_context )
         Detach(m_context);
 
     delete m_frame;
+}
+
+bool wxGLCanvas::SetCursor(const wxCursor& cursor)
+{
+    if ( !wxGLCanvasBase::SetCursor(cursor) )
+        return false;
+
+    if ( m_context && m_context->attached )
+        HaikuGLViewAttached(m_context->view);
+
+    return true;
+}
+
+void wxGLCanvas::HaikuGLViewAttached(BView *view) const
+{
+    // the pointer is over the view of the context, not over ours: it shows
+    // the cursor of the canvas or the one the canvas inherits
+    const wxCursor *cursor = NULL;
+    for ( const wxWindowHaiku *win = this; win; win = win->GetParent() )
+    {
+        if ( win->GetCursor().IsOk() )
+        {
+            cursor = &win->GetCursor();
+            break;
+        }
+
+        if ( win->IsTopLevel() )
+            break;
+    }
+
+    const BCursor * const native = cursor ? cursor->GetHaikuCursor() : NULL;
+
+    wxHaikuViewLock lock(view);
+    if ( !lock.IsLocked() )
+        return;
+
+    if ( native )
+    {
+        view->SetViewCursor(native, false);
+    }
+    else
+    {
+        BCursor standard(B_CURSOR_ID_SYSTEM_DEFAULT);
+        view->SetViewCursor(&standard, false);
+    }
 }
 
 void wxGLCanvas::DoMoveWindow(int x, int y, int width, int height)
@@ -1147,17 +1503,32 @@ void wxGLCanvas::HaikuShowFrame(const wxRect *rect)
 
 void wxGLCanvas::HaikuHandleEvent(const wxHaikuEvent& event)
 {
-    if ( event.type == wxHAIKU_EVT_DRAW && m_frame )
+    if ( event.type == wxHAIKU_EVT_DRAW )
     {
-        // Something of the canvas was exposed: show the last frame at once
-        // if it still fits. The program renders the next one when it gets
-        // the paint event, which may take it a while.
-        const BRect bounds = m_frame->Bounds();
-        if ( wxSize(bounds.IntegerWidth() + 1, bounds.IntegerHeight() + 1)
-                == HaikuGetViewSize() )
+        // Something of the canvas was exposed: show the last frame at once.
+        // The program renders the next one when it gets the paint event,
+        // which may take it a while.
+        if ( m_context && m_context->attached )
         {
-            const wxRect rect = wxFromHaikuRect(event.rect);
-            HaikuShowFrame(&rect);
+            // The libglvnd kit has done it in the Draw() hook. The classic
+            // one draws its front buffer, which only this thread may ask
+            // for.
+            if ( !KitPresentsInDraw() && m_context->frameShown )
+            {
+                wxHaikuViewLock lock(m_context->view);
+                if ( lock.IsLocked() )
+                    m_context->view->BGLView::Draw(event.rect);
+            }
+        }
+        else if ( m_frame )
+        {
+            const BRect bounds = m_frame->Bounds();
+            if ( wxSize(bounds.IntegerWidth() + 1, bounds.IntegerHeight() + 1)
+                    == HaikuGetViewSize() )
+            {
+                const wxRect rect = wxFromHaikuRect(event.rect);
+                HaikuShowFrame(&rect);
+            }
         }
     }
 
@@ -1171,6 +1542,27 @@ bool wxGLCanvas::SwapBuffers()
     wxHaikuGLContextData * const context = m_context;
     if ( !context || !m_view )
         return false;
+
+    if ( context->attached )
+    {
+        // the kit shows the frame
+        delete m_frame;
+        m_frame = NULL;
+
+        wxHaikuGLContextData * const current = gs_current;
+        MakeCurrent(context);
+
+        if ( KitPresentsInDraw() )
+            atomic_set(&context->view->m_swapped, 1);
+
+        // The looper must not be locked here, see the top of this file.
+        context->view->SwapBuffers();
+        context->frameShown = true;
+
+        MakeCurrent(current);
+
+        return true;
+    }
 
     BBitmap * const
         bitmap = HaikuGetFrameBitmap(context->size.x, context->size.y);
