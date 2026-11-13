@@ -1009,19 +1009,28 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
         }
     }
 
-    const int maxWidth = GetMaxWidth(),
-              minWidth = GetMinWidth(),
-              maxHeight = GetMaxHeight(),
-              minHeight = GetMinHeight();
+    // The size limits constrain top level windows only. A child gets the
+    // size it is given, as in wxMSW and wxOSX: sizers respect the minimal
+    // size themselves, and controls which lay out their children by hand
+    // (BambuStudio's TextInput makes its wxTextCtrl narrower than the 100
+    // pixels of its best width to leave room for the unit) must get what
+    // they ask for.
+    if ( IsTopLevel() )
+    {
+        const int maxWidth = GetMaxWidth(),
+                  minWidth = GetMinWidth(),
+                  maxHeight = GetMaxHeight(),
+                  minHeight = GetMinHeight();
 
-    if ( minWidth != wxDefaultCoord && width < minWidth )
-        width = minWidth;
-    if ( maxWidth != wxDefaultCoord && width > maxWidth )
-        width = maxWidth;
-    if ( minHeight != wxDefaultCoord && height < minHeight )
-        height = minHeight;
-    if ( maxHeight != wxDefaultCoord && height > maxHeight )
-        height = maxHeight;
+        if ( minWidth != wxDefaultCoord && width < minWidth )
+            width = minWidth;
+        if ( maxWidth != wxDefaultCoord && width > maxWidth )
+            width = maxWidth;
+        if ( minHeight != wxDefaultCoord && height < minHeight )
+            height = minHeight;
+        if ( maxHeight != wxDefaultCoord && height > maxHeight )
+            height = maxHeight;
+    }
 
     if ( width < 0 )
         width = 0;
