@@ -327,8 +327,24 @@ void AddFilterMenu(BFilePanel *panel, PanelHandler *handler,
                                               B_FOLLOW_LEFT | B_FOLLOW_BOTTOM);
     field->SetDivider(0);
 
-    float width, height;
-    field->GetPreferredSize(&width, &height);
+    // wide enough for the longest of the labels, which the field shows one
+    // at a time: ask it with each of them marked
+    float width = 0, height = 0;
+    for ( int32 n = 0; n < menu->CountItems(); n++ )
+    {
+        menu->ItemAt(n)->SetMarked(true);
+
+        float w, h;
+        field->GetPreferredSize(&w, &h);
+        if ( w > width )
+            width = w;
+        if ( h > height )
+            height = h;
+    }
+
+    if ( BMenuItem * const current = menu->ItemAt(filters.current) )
+        current->SetMarked(true);
+
     if ( width > rect.Width() )
         width = rect.Width();
     field->ResizeTo(width, height);
