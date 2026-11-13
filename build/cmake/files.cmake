@@ -2646,6 +2646,7 @@ set(OSX_IPHONE_HDR
 
 set(UNIV_THEMES_SRC
     src/univ/themes/gtk.cpp
+    src/univ/themes/haiku.cpp
     src/univ/themes/metal.cpp
     src/univ/themes/mono.cpp
     src/univ/themes/win32.cpp

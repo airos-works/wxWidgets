@@ -173,7 +173,10 @@ struct WXDLLIMPEXP_CORE wxThemeInfo
 #endif // wxUSE_ALL_THEMES
 
 // determine the default theme to use:
-#if defined(__WXGTK__) && wxUSE_THEME_GTK
+#if defined(__WXHAIKU__) && wxUSE_THEME_HAIKU
+    // the native look: everything is drawn by the system's BControlLook
+    #define wxUNIV_DEFAULT_THEME haiku
+#elif defined(__WXGTK__) && wxUSE_THEME_GTK
     #define wxUNIV_DEFAULT_THEME gtk
 #elif defined(__WXDFB__) && wxUSE_THEME_MONO
     // use mono theme for DirectFB port because it cannot correctly

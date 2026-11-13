@@ -90,6 +90,11 @@
 #   endif
 #endif /* wxUSE_THEME_GTK */
 
+#ifndef wxUSE_THEME_HAIKU
+    /* only the wxHaiku port has this theme: it needs the Be API */
+#   define wxUSE_THEME_HAIKU 0
+#endif /* wxUSE_THEME_HAIKU */
+
 #ifndef wxUSE_THEME_METAL
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_THEME_METAL must be defined"

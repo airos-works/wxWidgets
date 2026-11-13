@@ -643,6 +643,7 @@
 #cmakedefine01 wxUSE_ALL_THEMES
 
 #cmakedefine01 wxUSE_THEME_GTK
+#cmakedefine01 wxUSE_THEME_HAIKU
 #cmakedefine01 wxUSE_THEME_METAL
 #cmakedefine01 wxUSE_THEME_MONO
 #cmakedefine01 wxUSE_THEME_WIN32
