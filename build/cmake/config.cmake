@@ -204,6 +204,16 @@ function(wx_write_config)
         # functions the library does not have or lacks those it expects
         wx_string_append(WXCONFIG_CPPFLAGS " -DwxDEBUG_LEVEL=${wxBUILD_DEBUG_LEVEL}")
     endif()
+    if(WXHAIKU AND wxUSE_OPENGL AND OPENGL_INCLUDE_DIR AND CMAKE_SYSROOT)
+        # wx/glcanvas.h includes <GL/gl.h>: where the GL kit's headers are
+        # not in the sysroot (the arm64 SDK takes them from the extra
+        # development packages) the users of the gl library need the
+        # directory too
+        string(FIND "${OPENGL_INCLUDE_DIR}" "${CMAKE_SYSROOT}" wxgl_in_sysroot)
+        if(NOT wxgl_in_sysroot EQUAL 0)
+            wx_string_append(WXCONFIG_CPPFLAGS " -I${OPENGL_INCLUDE_DIR}")
+        endif()
+    endif()
     string(STRIP "${WXCONFIG_CPPFLAGS}" WXCONFIG_CPPFLAGS)
     set(WXCONFIG_CXXFLAGS ${WXCONFIG_CFLAGS})
     set(WXCONFIG_LDFLAGS_GUI)
