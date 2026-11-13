@@ -55,7 +55,10 @@ fi
 if [[ $# -gt 0 ]]; then
 	exec ninja -C "$BUILD" -j"$JOBS" "$@"
 fi
-ninja -C "$BUILD" -j"$JOBS"
+# the libraries and wxrc, not the samples the tree may be configured with
+mapfile -t LIBTARGETS < <(ninja -C "$BUILD" -t targets all |
+	sed -n 's/^\(wx[a-z]*\): phony$/\1/p')
+ninja -C "$BUILD" -j"$JOBS" "${LIBTARGETS[@]}"
 # Others build against the prefix while we work: it is replaced in one step
 # and only when the whole build passed.
 rm -rf "$PREFIX.new" "$PREFIX.old"
