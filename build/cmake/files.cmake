@@ -2965,6 +2965,15 @@ set(WEBVIEW2_GTK_SRC
     src/gtk/webview_webkit2.cpp
 )
 
+set(WEBVIEW_HAIKU_HDR
+    wx/haiku/webviewhistoryitem.h
+    wx/haiku/private/webview.h
+)
+
+set(WEBVIEW_HAIKU_SRC
+    src/haiku/webview_haiku.cpp
+)
+
 set(WEBVIEW_WEBKIT2_EXTENSION_SRC
     src/gtk/webview_webkit2_extension.cpp
 )

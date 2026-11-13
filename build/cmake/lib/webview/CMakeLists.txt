@@ -43,6 +43,10 @@ elseif(WXGTK)
     endif()
 elseif(APPLE)
     wx_append_sources(WEBVIEW_FILES WEBVIEW_OSX_SHARED)
+elseif(WXHAIKU)
+    # common code plus the place where a backend plugs in: see
+    # src/haiku/webview_haiku.cpp
+    wx_append_sources(WEBVIEW_FILES WEBVIEW_HAIKU)
 endif()
 
 wx_add_library(wxwebview ${WEBVIEW_FILES})

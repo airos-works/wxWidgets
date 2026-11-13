@@ -493,6 +493,11 @@ if(wxUSE_GUI)
                 message(WARNING "webkit not found or enabled, wxWebview won't be available")
                 wx_option_force_value(wxUSE_WEBVIEW OFF)
             endif()
+        elseif(WXHAIKU)
+            # none of the backends of the other ports; the port's own one
+            # plugs in at run time (src/haiku/webview_haiku.cpp)
+            set(wxUSE_WEBVIEW_WEBKIT OFF)
+            set(wxUSE_WEBVIEW_WEBKIT2 OFF)
         endif()
     endif()
 
