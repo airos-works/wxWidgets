@@ -107,6 +107,12 @@ if(wxUSE_LIBSDL)
         wx_lib_link_libraries(wxcore PUBLIC ${SDL_LIBRARY})
     endif()
 endif()
+if(WXHAIKU AND wxUSE_SOUND)
+    # wxSound plays through the Game Kit. Only programs which use it should
+    # load libgame and, through it, libmedia: one linker argument so that
+    # nothing gets between the switches.
+    wx_lib_link_libraries(wxcore PUBLIC "-Wl,--as-needed,-lgame,-lmedia,--no-as-needed")
+endif()
 if(wxUSE_LIBNOTIFY)
     wx_lib_include_directories(wxcore PUBLIC ${LIBNOTIFY_INCLUDE_DIRS})
     wx_lib_link_libraries(wxcore PUBLIC ${LIBNOTIFY_LIBRARIES})

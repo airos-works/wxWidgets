@@ -2344,14 +2344,21 @@ set(HAIKU_LOWLEVEL_HDR
 # The parts of the Haiku port which are not needed to get a window on the
 # screen: native dialogs, system integration, placeholders.
 set(HAIKU_SRC
+    src/common/taskbarcmn.cpp
     src/haiku/dirdlg.cpp
     src/haiku/filedlg.cpp
     src/haiku/filepanel.cpp
+    src/haiku/launch.cpp
+    src/haiku/notifmsg.cpp
+    src/haiku/sound.cpp
+    src/haiku/taskbar.cpp
 )
 
 set(HAIKU_HDR
     wx/haiku/dirdlg.h
     wx/haiku/filedlg.h
+    wx/haiku/sound.h
+    wx/haiku/taskbar.h
 )
 
 set(OSX_LOWLEVEL_SRC

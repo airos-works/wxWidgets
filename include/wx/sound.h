@@ -58,6 +58,8 @@ protected:
     #include "wx/msw/sound.h"
 #elif defined(__WXMAC__)
     #include "wx/osx/sound.h"
+#elif defined(__WXHAIKU__)
+    #include "wx/haiku/sound.h"
 #elif defined(__UNIX__)
     #include "wx/unix/sound.h"
 #endif
