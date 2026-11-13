@@ -1551,12 +1551,22 @@ void wxMenuItem::NotifyMenu()
     m_parentMenu->RefreshItem(this);
 }
 
+#if defined(__WXHAIKU__) && wxUSE_ACCEL
+// src/haiku/utils.cpp: the names of the keys really pressed
+extern wxString wxHaikuAccelLabel(const wxString& accel);
+#endif
+
 void wxMenuItem::UpdateAccelInfo()
 {
     m_indexAccel = wxControl::FindAccelIndex(m_text);
 
     // will be empty if the text contains no TABs - ok
     m_strAccel = m_text.AfterFirst(wxT('\t'));
+
+#if defined(__WXHAIKU__) && wxUSE_ACCEL
+    // (only what is shown: the accelerator itself is m_text's)
+    m_strAccel = wxHaikuAccelLabel(m_strAccel);
+#endif
 }
 
 void wxMenuItem::SetItemLabel(const wxString& text)

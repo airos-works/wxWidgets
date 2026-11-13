@@ -16,6 +16,7 @@
     #include "wx/toplevel.h"
 #endif
 
+#include "wx/accel.h"
 #include "wx/apptrait.h"
 #include "wx/display.h"
 #include "wx/private/display.h"
@@ -284,6 +285,68 @@ int KeyCodeOfCharacter(char c)
 }
 
 } // anonymous namespace
+
+#if wxUSE_ACCEL
+
+namespace
+{
+
+// the name on the keyboard of the key the key map has for a modifier
+wxString ModifierKeyName(uint32 modifier, const wxString& fallback)
+{
+    uint32 key = 0;
+    if ( get_modifier_key(modifier, &key) == B_OK )
+    {
+        switch ( key )
+        {
+            case 0x5c:
+            case 0x60:
+                return _("Ctrl");
+            case 0x5d:
+            case 0x5f:
+                return _("Alt");
+            case 0x66:
+            case 0x67:
+                return "Win";
+            case 0x68:
+                return "Menu";
+        }
+    }
+
+    return fallback;
+}
+
+} // anonymous namespace
+
+// The accelerator of a menu item as it is shown: wxACCEL_CTRL is the Command
+// key, which is the key labelled Alt on a PC keyboard unless the user changed
+// the key map, and wxACCEL_ALT the Control key. As BMenuItem does, the
+// modifiers are shown by the names of the keys the key map has for them, in
+// its order: Shift, Control, Command, then the key ("Ctrl+Shift+S" of the
+// program reads "Shift+Alt+S" with the default key map).
+wxString wxHaikuAccelLabel(const wxString& accel)
+{
+    wxAcceleratorEntry entry;
+    if ( accel.empty() || !entry.FromString(accel) )
+        return accel;
+
+    const int flags = entry.GetFlags();
+
+    wxString label;
+    if ( flags & wxACCEL_SHIFT )
+        label << _("Shift") << '+';
+    if ( flags & wxACCEL_ALT )
+        label << ModifierKeyName(B_LEFT_CONTROL_KEY, _("Ctrl")) << '+';
+    if ( flags & wxACCEL_CTRL )
+        label << ModifierKeyName(B_LEFT_COMMAND_KEY, _("Alt")) << '+';
+
+    // the key itself, as wx names it
+    label << wxAcceleratorEntry(wxACCEL_NORMAL, entry.GetKeyCode()).ToString();
+
+    return label;
+}
+
+#endif // wxUSE_ACCEL
 
 bool wxGetKeyState(wxKeyCode key)
 {
