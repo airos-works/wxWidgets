@@ -124,10 +124,10 @@ void ClearFontCaches()
           it != gs_fontCaches.end();
           ++it )
     {
-        delete it->second;
+        // the fonts keep pointers to their caches: emptied, not deleted
+        it->second->valid = false;
+        it->second->widths.clear();
     }
-
-    gs_fontCaches.clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -187,6 +187,17 @@ bool FamilyExists(const wxString& name, font_family *familyOut = NULL)
 
     font_family family;
     strlcpy(family, utf8, sizeof(family));
+
+    // Without the application object (a font made before wxApp is
+    // initialized) app_server cannot be asked: the name is taken as it is,
+    // the font falls back to the default family when it is first used if
+    // there is no such family.
+    if ( !be_app )
+    {
+        if ( familyOut )
+            strlcpy(*familyOut, family, sizeof(*familyOut));
+        return true;
+    }
 
     // SetFamilyAndStyle() checks the name with app_server, which knows the
     // private fonts of this application too

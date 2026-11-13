@@ -287,13 +287,23 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                   gs_captureWindow ? (unsigned)gs_captureWindow->GetHaikuHandle() : 0,
                   gs_buttonWindow ? (unsigned)gs_buttonWindow->GetHaikuHandle() : 0);
 
-    const int32 oldButtons = gs_buttons;
-    gs_buttons = he.buttons;
-    gs_modifiers = he.modifiers;
-
     const wxPoint screen((int)floorf(he.screenWhere.x),
                          (int)floorf(he.screenWhere.y));
     gs_mousePos = screen;
+
+    // The moves of a drag and drop session (ours or another application's:
+    // the button was pressed elsewhere) are no mouse events for the windows
+    // the pointer passes, as in the other ports.
+    if ( he.type == wxHAIKU_EVT_MOUSE_MOVED && he.flag )
+    {
+        if ( !gs_captureWindow && !gs_buttonWindow )
+            SetMouseWindow(NULL, he);
+        return;
+    }
+
+    const int32 oldButtons = gs_buttons;
+    gs_buttons = he.buttons;
+    gs_modifiers = he.modifiers;
 
     // the window under the pointer may be a sibling above the one whose
     // view got the message
@@ -1010,6 +1020,16 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
     if ( nx == m_rect.x && ny == m_rect.y
             && width == m_rect.width && height == m_rect.height )
     {
+        // The sizers ask for a size event even if nothing changed
+        // (wxSizerItem::SetDimension()): a nested window lays out its
+        // children again, one of them may have been shown or hidden.
+        if ( sizeFlags & wxSIZE_FORCE_EVENT )
+        {
+            wxSizeEvent event(wxSize(width, height), GetId());
+            event.SetEventObject(this);
+            HandleWindowEvent(event);
+        }
+
         return;
     }
 
@@ -1064,6 +1084,11 @@ bool wxWindowHaiku::Show(bool show)
         if ( gs_buttonWindow == this )
             gs_buttonWindow = NULL;
     }
+
+    // as the other ports do, to the window itself
+    wxShowEvent eventShow(GetId(), show);
+    eventShow.SetEventObject(this);
+    HandleWindowEvent(eventShow);
 
     return true;
 }

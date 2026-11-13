@@ -63,6 +63,13 @@ void DeleteNativeBitmap(BBitmap *bitmap, wxUint32 drawSerial)
     if ( !bitmap )
         return;
 
+    // A bitmap owned by a static object of the application is destroyed by
+    // exit(), after the BApplication: deleting it needs app_server (libbe
+    // calls the debugger without). It is left to the end of the team; the
+    // lists below may be gone too by now.
+    if ( !be_app )
+        return;
+
     if ( drawSerial > gs_syncedSerial )
     {
         gs_graveyard.push_back(bitmap);

@@ -756,15 +756,22 @@ bool wxNonOwnedWindow::Show(bool show)
     wxHAIKU_TRACE("%s tlw=%u (%s)", show ? "show" : "hide", (unsigned)m_handle,
                   (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str());
 
-    wxHaikuWindowLock lock(m_window);
-    if ( lock.IsLocked() && show != m_windowShown )
     {
-        if ( show )
-            m_window->Show();
-        else
-            m_window->Hide();
-        m_windowShown = show;
+        wxHaikuWindowLock lock(m_window);
+        if ( lock.IsLocked() && show != m_windowShown )
+        {
+            if ( show )
+                m_window->Show();
+            else
+                m_window->Hide();
+            m_windowShown = show;
+        }
     }
+
+    // (not with the window locked: handlers may do anything)
+    wxShowEvent eventShow(GetId(), show);
+    eventShow.SetEventObject(this);
+    HandleWindowEvent(eventShow);
 
     return true;
 }

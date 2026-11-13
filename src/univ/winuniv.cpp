@@ -576,7 +576,30 @@ bool wxWindow::SetCurrent(bool doit)
 int wxWindow::GetStateFlags() const
 {
     int flags = 0;
-    if ( !IsEnabled() )
+
+    // A top level window disabled by a modal dialog does not gray out its
+    // children, as in the native ports (wxWindowBase::
+    // NotifyWindowOnEnableChange() does not tell them): only the window
+    // itself and its ancestors below the top level window count.
+    bool enabled = true;
+    for ( const wxWindow *win = this; win; win = win->GetParent() )
+    {
+        if ( win->IsTopLevel() )
+        {
+            // (a top level window itself is drawn as it is)
+            if ( win == this )
+                enabled = IsThisEnabled();
+            break;
+        }
+
+        if ( !win->IsThisEnabled() )
+        {
+            enabled = false;
+            break;
+        }
+    }
+
+    if ( !enabled )
         flags |= wxCONTROL_DISABLED;
 
     // the following states are only possible if our application is active - if
