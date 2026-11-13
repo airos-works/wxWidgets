@@ -2846,6 +2846,13 @@ set(MEDIA_UNIX_SRC
 set(MEDIA_UNIX_HDR
 )
 
+set(MEDIA_HAIKU_SRC
+    src/haiku/mediactrl.cpp
+)
+
+set(MEDIA_HAIKU_HDR
+)
+
 set(MEDIA_GTK_SRC
 )
 

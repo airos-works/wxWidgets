@@ -21,6 +21,8 @@ elseif(WXGTK)
     wx_append_sources(MEDIA_FILES MEDIA_UNIX)
 elseif(WXQT)
     wx_append_sources(MEDIA_FILES MEDIA_QT)
+elseif(WXHAIKU)
+    wx_append_sources(MEDIA_FILES MEDIA_HAIKU)
 endif()
 
 wx_add_library(wxmedia ${MEDIA_FILES})
