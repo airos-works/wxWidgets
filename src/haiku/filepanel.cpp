@@ -369,6 +369,52 @@ void AddFilterMenu(BFilePanel *panel, PanelHandler *handler,
         window->SetSizeLimits(needed, maxWidth, minHeight, maxHeight);
 }
 
+// Everything the native panel is made of. It outlives ShowModal(): the panel
+// is destroyed by a thread of its own, see DestroyPanel().
+struct PanelState
+{
+    PanelState() : refFilter(&filters), panel(NULL), handler(NULL) { }
+
+    PanelFilters filters;
+    PanelRefFilter refFilter;
+    NativePanel *panel;
+    PanelHandler *handler;
+};
+
+int32 DestroyPanelThread(void *data)
+{
+    PanelState * const state = static_cast<PanelState *>(data);
+
+    // the handler does not belong to the window
+    BWindow * const window = state->panel->Window();
+    if ( window && window->Lock() )
+    {
+        window->RemoveHandler(state->handler);
+        window->Unlock();
+    }
+
+    // waits until the window thread has ended; the filter must exist until
+    // then
+    delete state->panel;
+    delete state->handler;
+    delete state;
+
+    return 0;
+}
+
+// The destructor of BFilePanel waits for the panel's window thread to end,
+// and Tracker's window takes its time to go (it stops the threads which
+// fill it first): the wx thread, which must never wait for a looper, leaves
+// that to a thread made for it.
+void DestroyPanel(PanelState *state)
+{
+    const thread_id thread = spawn_thread(DestroyPanelThread,
+                                          "wx file panel cleanup",
+                                          B_NORMAL_PRIORITY, state);
+    if ( thread < 0 || resume_thread(thread) != B_OK )
+        DestroyPanelThread(state);
+}
+
 } // anonymous namespace
 
 // ============================================================================
@@ -442,7 +488,8 @@ bool wxHaikuFilePanel::ShowModal(wxWindow *parent)
     m_chosen = false;
 
     // the patterns in the form the window thread uses them
-    PanelFilters filters;
+    PanelState * const state = new PanelState;
+    PanelFilters& filters = state->filters;
     filters.dirsOnly = m_mode == Mode_Dir;
     filters.current = m_filterIndex;
 
@@ -473,22 +520,22 @@ bool wxHaikuFilePanel::ShowModal(wxWindow *parent)
                                              : m_filterPatterns[n]).utf8_str()));
     }
 
-    PanelRefFilter refFilter(&filters);
-
     NativePanel * const panel = new NativePanel(
         GetHaikuCallbackHandle(),
         m_mode == Mode_Save ? B_SAVE_PANEL : B_OPEN_PANEL,
         m_mode == Mode_Dir ? B_DIRECTORY_NODE : B_FILE_NODE,
         m_multiple,
-        m_mode == Mode_Save && filters.patterns.empty() ? NULL : &refFilter);
+        m_mode == Mode_Save && filters.patterns.empty() ? NULL
+                                                        : &state->refFilter);
+    state->panel = panel;
 
     BWindow * const window = panel->Window();
     PanelHandler * const handler = new PanelHandler(panel, &filters);
+    state->handler = handler;
 
     if ( !window || !window->Lock() )
     {
-        delete panel;
-        delete handler;
+        DestroyPanel(state);
         return false;
     }
 
@@ -550,18 +597,10 @@ bool wxHaikuFilePanel::ShowModal(wxWindow *parent)
         m_loop = NULL;
     }
 
-    m_filterIndex = filters.current;
+    m_filterIndex = atomic_get(&filters.current);
 
-    // The destructor of the panel waits for its window thread to end, which
-    // never waits for this thread. The handler does not belong to the window.
-    if ( window->Lock() )
-    {
-        window->RemoveHandler(handler);
-        window->Unlock();
-    }
-
-    delete panel;
-    delete handler;
+    // the panel is hidden; what remains to be done needs no wx
+    DestroyPanel(state);
 
     return m_chosen;
 }
