@@ -4035,6 +4035,11 @@ void wxTextCtrl::DoDrawTextInRect(wxDC& dc, const wxRect& rectUpdate)
 
     // prepare for drawing
     wxCoord hLine = GetLineHeight();
+    if ( hLine <= 0 )
+    {
+        // a font without height: the loop below would never end
+        return;
+    }
 
     // these vars will be used for hit testing of the current row
     wxCoord y = rectUpdate.y;

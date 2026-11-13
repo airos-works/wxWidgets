@@ -482,9 +482,10 @@ wxFont::wxFont(const wxFontInfo& info)
            info.GetFaceName(),
            info.GetEncoding());
 
+    // (a wxFontInfo without size has -1 here: Create() used the default)
     if ( info.IsUsingSizeInPixels() )
         SetPixelSize(info.GetPixelSize());
-    else
+    else if ( info.GetFractionalPointSize() > 0 )
         SetFractionalPointSize(info.GetFractionalPointSize());
 
     SetNumericWeight(info.GetNumericWeight());
@@ -660,6 +661,10 @@ const wxNativeFontInfo *wxFont::GetNativeFontInfo() const
 void wxFont::SetFractionalPointSize(double pointSize)
 {
     AllocExclusive();
+
+    // never a font without size: its metrics are all 0
+    if ( pointSize <= 0 )
+        pointSize = wxNORMAL_FONT->GetFractionalPointSize();
 
     M_FONTDATA->m_info.pointSize = pointSize;
     M_FONTDATA->m_pixelHeight = 0;
