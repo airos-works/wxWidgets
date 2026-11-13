@@ -4706,6 +4706,10 @@ bool wxTextCtrl::PerformAction(const wxControlAction& actionOrig,
         if ( CanRedo() )
             Redo();
     }
+    else if ( action == wxACTION_TEXT_SEL_ALL )
+    {
+        SelectAll();
+    }
     else
     {
         return wxControl::PerformAction(action, numArg, strArg);
@@ -4818,8 +4822,20 @@ void wxTextCtrl::OnChar(wxKeyEvent& event)
             return;
         }
 #if wxUSE_UNICODE
-        else if (unicode > 0)
+        else if ( unicode == wxT('\t') )
         {
+            // the character only for a multi-line control which asked for
+            // it, otherwise the key moves the focus
+            if ( !IsSingleLine() && HasFlag(wxTE_PROCESS_TAB) )
+            {
+                PerformAction(wxACTION_TEXT_INSERT, -1, unicode);
+
+                return;
+            }
+        }
+        else if ( unicode >= 32 && unicode != 127 )
+        {
+            // (no other control characters either)
             PerformAction(wxACTION_TEXT_INSERT, -1, unicode);
 
             return;
@@ -4962,9 +4978,20 @@ bool wxStdTextCtrlInputHandler::HandleKey(wxInputConsumer *consumer,
             {
                 switch ( keycode )
                 {
+#ifdef __WXHAIKU__
+                    // as in BTextView: select all, redo is Shift+Z (or Y)
+                    case 'A':
+                        action = wxACTION_TEXT_SEL_ALL;
+                        break;
+
+                    case 'Y':
+                        action = wxACTION_TEXT_REDO;
+                        break;
+#else
                     case 'A':
                         action = wxACTION_TEXT_REDO;
                         break;
+#endif
 
                     case 'C':
                         action = wxACTION_TEXT_COPY;
@@ -4979,6 +5006,13 @@ bool wxStdTextCtrlInputHandler::HandleKey(wxInputConsumer *consumer,
                         break;
 
                     case 'Z':
+#ifdef __WXHAIKU__
+                        if ( shiftDown )
+                        {
+                            action = wxACTION_TEXT_REDO;
+                            break;
+                        }
+#endif
                         action = wxACTION_TEXT_UNDO;
                         break;
                 }

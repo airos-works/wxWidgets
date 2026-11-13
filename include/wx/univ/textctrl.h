@@ -60,6 +60,7 @@ class WXDLLIMPEXP_FWD_CORE wxTextCtrlCommandProcessor;
 // undo or redo
 #define wxACTION_TEXT_UNDO          wxT("undo")
 #define wxACTION_TEXT_REDO          wxT("redo")
+#define wxACTION_TEXT_SEL_ALL       wxT("selall")
 
 // ----------------------------------------------------------------------------
 // wxTextCtrl

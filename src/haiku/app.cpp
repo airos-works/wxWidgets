@@ -452,8 +452,31 @@ void wxApp::HaikuArgvReceived(const wxArrayString& args)
 
 void wxApp::HaikuQuitRequested()
 {
+    // Not while something modal runs: its caller is in the middle of
+    // ShowModal(), usually with the dialog on its stack, and the windows
+    // below it must stay. The dialog is shown to the user instead.
+    wxWindowList::compatibility_iterator node;
+    for ( node = wxTopLevelWindows.GetLast(); node; node = node->GetPrevious() )
+    {
+        wxWindow * const win = node->GetData();
+        wxNonOwnedWindow * const
+            tlw = dynamic_cast<wxNonOwnedWindow *>(win);
+        if ( tlw && tlw->IsShown() && tlw->HaikuIsModal() )
+        {
+            tlw->Raise();
+            return;
+        }
+    }
+
+    for ( node = wxTopLevelWindows.GetLast(); node; node = node->GetPrevious() )
+    {
+        // (disabled by a native modal panel or a wxWindowDisabler)
+        if ( node->GetData()->IsShown() && !node->GetData()->IsThisEnabled() )
+            return;
+    }
+
     // close the windows as if the user did: any of them may veto
-    wxWindowList::compatibility_iterator node = wxTopLevelWindows.GetLast();
+    node = wxTopLevelWindows.GetLast();
     while ( node )
     {
         wxWindow * const win = node->GetData();
