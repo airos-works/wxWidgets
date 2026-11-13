@@ -222,6 +222,9 @@ protected:
     #elif defined(__WXOSX_COCOA__) || defined(__WXOSX_IPHONE__) || defined(__DARWIN__)
         #include "wx/osx/cocoa/stdpaths.h"
         #define wxHAS_NATIVE_STDPATHS
+    #elif defined(__HAIKU__)
+        #include "wx/haiku/stdpaths.h"
+        #define wxHAS_NATIVE_STDPATHS
     #elif defined(__UNIX__)
         #include "wx/unix/stdpaths.h"
         #define wxHAS_NATIVE_STDPATHS

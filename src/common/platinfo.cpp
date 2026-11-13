@@ -60,7 +60,7 @@ static const wxChar* const wxOperatingSystemIdNames[] =
     wxT("AIX"),
     wxT("HPUX"),
 
-    wxT("Other Unix"),
+    wxT("Haiku"),
     wxT("Other Unix"),
 
     wxT("Unknown"),

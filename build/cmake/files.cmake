@@ -55,6 +55,17 @@ set(BASE_UNIX_HDR
     wx/unix/stdpaths.h
 )
 
+set(BASE_HAIKU_SRC
+    ${BASE_UNIX_AND_DARWIN_NOTWXMAC_SRC}
+    src/haiku/stdpaths.cpp
+    src/haiku/utilsbase.cpp
+)
+
+set(BASE_HAIKU_HDR
+    ${BASE_UNIX_AND_DARWIN_NOTWXMAC_HDR}
+    wx/haiku/stdpaths.h
+)
+
 set(BASE_WIN32_SRC
     src/msw/basemsw.cpp
     src/msw/crashrpt.cpp
