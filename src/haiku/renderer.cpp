@@ -590,6 +590,10 @@ public:
                                  wxHeaderSortIconType sortArrow = wxHDR_SORT_ICON_NONE,
                                  wxHeaderButtonParams *params = NULL) wxOVERRIDE;
 
+    virtual int GetHeaderButtonHeight(wxWindow *win) wxOVERRIDE;
+
+    virtual int GetHeaderButtonMargin(wxWindow *win) wxOVERRIDE;
+
     virtual void DrawTreeItemButton(wxWindow *win,
                                     wxDC& dc,
                                     const wxRect& rect,
@@ -780,6 +784,20 @@ int wxRendererHaiku::DrawHeaderButton(wxWindow *win,
     dc.DrawLine(rect.GetRight(), rect.y, rect.GetRight(), rect.GetBottom());
 
     return DrawHeaderButtonContents(win, dc, rect, flags, sortArrow, params);
+}
+
+int wxRendererHaiku::GetHeaderButtonHeight(wxWindow *win)
+{
+    // the titles of a BColumnListView: the font and 8 pixels, with the line
+    // under them
+    const int heightFont = win ? win->GetCharHeight()
+                               : wxHaikuLook::Scaled(16);
+    return heightFont + wxHaikuLook::Scaled(8) + 1;
+}
+
+int wxRendererHaiku::GetHeaderButtonMargin(wxWindow *WXUNUSED(win))
+{
+    return wxHaikuLook::LabelSpacing();
 }
 
 // ----------------------------------------------------------------------------
@@ -1039,7 +1057,9 @@ void wxRendererHaiku::DrawItemText(wxWindow *win,
     const wxString paintText = wxControl::Ellipsize(text, dc, ellipsizeMode,
                                                     rect.GetWidth());
 
-    wxDCTextColourChanger changeFg(dc, colour);
+    wxDCTextColourChanger changeFg(dc);
+    if ( colour.IsOk() )
+        changeFg.Set(colour);
     dc.DrawLabel(paintText, rect, align);
 }
 
