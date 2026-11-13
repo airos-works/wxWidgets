@@ -3183,6 +3183,14 @@ set(OPENGL_OSX_IPHONE_SRC
     src/osx/glcanvas_osx.cpp
 )
 
+set(OPENGL_HAIKU_SRC
+    src/haiku/glcanvas.cpp
+)
+
+set(OPENGL_HAIKU_HDR
+    wx/haiku/glcanvas.h
+)
+
 set(UNIX_SOUND_SDL_SRC
     src/unix/sound_sdl.cpp
 )

@@ -31,6 +31,10 @@
     #endif
     // Our macro
     #define MyGetProcAddress(name) wglGetProcAddress((LPCSTR)name)
+#elif defined(__HAIKU__)
+    // libGL of the GL kit exports the OpenGL functions themselves
+    #include <dlfcn.h>
+    #define MyGetProcAddress(name) dlsym(RTLD_DEFAULT, name)
 #else // Linux
     // GLX_ARB_get_proc_address
     // glXGetProcAddressARB is statically exported by all libGL implementations,

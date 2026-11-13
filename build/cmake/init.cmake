@@ -440,7 +440,38 @@ if(wxUSE_GUI)
             set(OPENGL_FOUND TRUE)
             set(OPENGL_LIBRARIES "-framework OpenGLES" "-framework QuartzCore" "-framework GLKit")
         else()
+            if(WXHAIKU)
+                # The GL kit (BGLView) is in libGL and its headers in an
+                # os/opengl directory: the system's, which the compiler
+                # searches anyway, or the one of the extra dev packages where
+                # the SDK has no OpenGL (arm64: libglvnd, whose libOpenGL has
+                # no GL kit).
+                set(OpenGL_GL_PREFERENCE LEGACY)
+                find_path(wxHAIKU_GLKIT_INCLUDE_DIR GLView.h
+                    PATH_SUFFIXES os/opengl opengl)
+                if(wxHAIKU_GLKIT_INCLUDE_DIR
+                        AND EXISTS "${wxHAIKU_GLKIT_INCLUDE_DIR}/GL/gl.h")
+                    set(OPENGL_INCLUDE_DIR "${wxHAIKU_GLKIT_INCLUDE_DIR}"
+                        CACHE PATH "OpenGL headers")
+                endif()
+            endif()
             find_package(OpenGL)
+            if(WXHAIKU AND OPENGL_FOUND)
+                if(NOT wxHAIKU_GLKIT_INCLUDE_DIR)
+                    message(WARNING "GLView.h not found, wxGLCanvas won't be available")
+                    set(OPENGL_FOUND FALSE)
+                else()
+                    list(APPEND OPENGL_INCLUDE_DIR "${wxHAIKU_GLKIT_INCLUDE_DIR}")
+                    list(REMOVE_DUPLICATES OPENGL_INCLUDE_DIR)
+                    # a libGL outside of the sysroot needs libraries which
+                    # the linker does not find by itself
+                    get_filename_component(wxHAIKU_GL_LIBDIR "${OPENGL_gl_LIBRARY}" DIRECTORY)
+                    string(FIND "${wxHAIKU_GL_LIBDIR}" "${CMAKE_SYSROOT}/" wxHAIKU_GL_IN_SYSROOT)
+                    if(NOT CMAKE_SYSROOT OR NOT wxHAIKU_GL_IN_SYSROOT EQUAL 0)
+                        set(wxHAIKU_GL_RPATH_LINK "${wxHAIKU_GL_LIBDIR}")
+                    endif()
+                endif()
+            endif()
             if(WXGTK3 AND OpenGL_EGL_FOUND AND wxUSE_GLCANVAS_EGL)
                 if(UNIX AND NOT APPLE)
                 set(OPENGL_LIBRARIES OpenGL EGL)
