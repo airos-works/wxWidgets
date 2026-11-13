@@ -217,6 +217,51 @@ bool FamilyExists(const wxString& name, font_family *familyOut = NULL)
     return true;
 }
 
+// The style of the family closest to the weight and slant wanted; an empty
+// name if the family has no styles app_server tells about.
+void FindStyle(const font_family family, int wantWeight, bool wantItalic,
+               font_style bestStyle, bool *bestItalic, int *bestWeight)
+{
+    bestStyle[0] = '\0';
+    *bestItalic = false;
+    *bestWeight = wxFONTWEIGHT_NORMAL;
+    int bestScore = INT_MAX;
+
+    const int32 count = count_font_styles(const_cast<char *>(family));
+    for ( int32 i = 0; i < count; i++ )
+    {
+        font_style style;
+        uint16 face;
+        if ( get_font_style(const_cast<char *>(family), i, &style, &face) != B_OK )
+            continue;
+
+        const wxString name = wxString::FromUTF8(style);
+        const bool italic = (face & B_ITALIC_FACE) || IsItalicStyleName(name);
+        const int weight = WeightFromStyleName(name);
+
+        int score = abs(weight - wantWeight);
+        if ( italic != wantItalic )
+            score += 2000;
+
+        // prefer the plain variants to the condensed, extended etc. ones
+        const wxString lower = name.Lower();
+        if ( lower.Contains("condensed") || lower.Contains("narrow")
+                || lower.Contains("extended") || lower.Contains("expanded")
+                || lower.Contains("caption") || lower.Contains("display") )
+        {
+            score += 500;
+        }
+
+        if ( score < bestScore )
+        {
+            bestScore = score;
+            strlcpy(bestStyle, style, sizeof(font_style));
+            *bestItalic = italic;
+            *bestWeight = weight;
+        }
+    }
+}
+
 // The best matches for the families are looked up once per name.
 WX_DECLARE_STRING_HASH_MAP(wxString, FamilyNameMap);
 FamilyNameMap gs_familyNames;
@@ -269,7 +314,10 @@ wxString SubstituteFace(const wxString& face)
         }
     }
 
-    gs_familyNames[face] = result;
+    // Without the application nothing was checked (see FamilyExists()): the
+    // answer must not stay for the fonts made later.
+    if ( be_app )
+        gs_familyNames[face] = result;
     return result;
 }
 
@@ -429,44 +477,10 @@ void wxFontRefData::Realize() const
     const int wantWeight = m_info.weight;
 
     font_style bestStyle;
-    bestStyle[0] = '\0';
-    int bestScore = INT_MAX;
     bool bestItalic = false;
     int bestWeight = wxFONTWEIGHT_NORMAL;
-
-    const int32 count = count_font_styles(family);
-    for ( int32 i = 0; i < count; i++ )
-    {
-        font_style style;
-        uint16 face;
-        if ( get_font_style(family, i, &style, &face) != B_OK )
-            continue;
-
-        const wxString name = wxString::FromUTF8(style);
-        const bool italic = (face & B_ITALIC_FACE) || IsItalicStyleName(name);
-        const int weight = WeightFromStyleName(name);
-
-        int score = abs(weight - wantWeight);
-        if ( italic != wantItalic )
-            score += 2000;
-
-        // prefer the plain variants to the condensed, extended etc. ones
-        const wxString lower = name.Lower();
-        if ( lower.Contains("condensed") || lower.Contains("narrow")
-                || lower.Contains("extended") || lower.Contains("expanded")
-                || lower.Contains("caption") || lower.Contains("display") )
-        {
-            score += 500;
-        }
-
-        if ( score < bestScore )
-        {
-            bestScore = score;
-            strlcpy(bestStyle, style, sizeof(bestStyle));
-            bestItalic = italic;
-            bestWeight = weight;
-        }
-    }
+    FindStyle(family, wantWeight, wantItalic,
+              bestStyle, &bestItalic, &bestWeight);
 
     BFont font(base);
     if ( font.SetFamilyAndStyle(family, bestStyle[0] ? bestStyle : NULL) != B_OK )
@@ -475,18 +489,34 @@ void wxFontRefData::Realize() const
         const char *style = wantWeight >= wxFONTWEIGHT_SEMIBOLD
                                 ? (wantItalic ? "Bold Italic" : "Bold")
                                 : (wantItalic ? "Italic" : "Regular");
-        if ( font.SetFamilyAndStyle(family, style) != B_OK
-                && font.SetFamilyAndStyle(family, NULL) != B_OK )
+        if ( font.SetFamilyAndStyle(family, style) == B_OK
+                || font.SetFamilyAndStyle(family, NULL) == B_OK )
         {
-            font = *base;
+            font_family f;
+            font_style s;
+            font.GetFamilyAndStyle(&f, &s);
+            const wxString name = wxString::FromUTF8(s);
+            bestItalic = IsItalicStyleName(name);
+            bestWeight = WeightFromStyleName(name);
         }
-
-        font_family f;
-        font_style s;
-        font.GetFamilyAndStyle(&f, &s);
-        const wxString name = wxString::FromUTF8(s);
-        bestItalic = IsItalicStyleName(name);
-        bestWeight = WeightFromStyleName(name);
+        else
+        {
+            // No such family (a face name taken unchecked before the
+            // application existed, a private font gone): the default family,
+            // in its style closest to the one wanted, not its regular style
+            // made bold or slanted.
+            base->GetFamilyAndStyle(&family, &defaultStyle);
+            FindStyle(family, wantWeight, wantItalic,
+                      bestStyle, &bestItalic, &bestWeight);
+            font = *base;
+            if ( !bestStyle[0]
+                    || font.SetFamilyAndStyle(family, bestStyle) != B_OK )
+            {
+                font = *base;
+                bestItalic = IsItalicStyleName(wxString::FromUTF8(defaultStyle));
+                bestWeight = WeightFromStyleName(wxString::FromUTF8(defaultStyle));
+            }
+        }
     }
 
     // what the family lacks is synthesized
