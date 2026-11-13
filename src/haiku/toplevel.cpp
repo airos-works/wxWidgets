@@ -136,6 +136,24 @@ void wxTopLevelWindowHaiku::SetWindowStyleFlag(long style)
 
 bool wxTopLevelWindowHaiku::Show(bool show)
 {
+    if ( show && !m_shownOnce && m_autoPosition )
+    {
+        // Nobody said where the window should be: dialogs appear over the
+        // window they belong to (or in the middle of the screen), as the
+        // window managers of the other platforms place them; frames keep
+        // their cascaded position.
+        if ( wxDynamicCast(this, wxDialog) )
+        {
+            wxWindow * const parent = wxGetTopLevelParent(GetParent());
+            if ( parent && parent != this && parent->IsShown() )
+                CentreOnParent();
+            else
+                CentreOnScreen();
+        }
+
+        m_autoPosition = false;
+    }
+
     if ( show && m_showInactive )
     {
         // shown normally this time
@@ -151,6 +169,21 @@ bool wxTopLevelWindowHaiku::Show(bool show)
         // app_server reports the deactivation too, but wx code run before
         // then must not think that a hidden window is the active one
         HaikuActivated(false);
+
+        // The window this one belonged to gets the activation back (the
+        // parent of a dialog, as in the other ports): app_server does not
+        // necessarily pick it.
+        wxWindow *next = wxGetTopLevelParent(GetParent());
+        if ( !next || !next->IsShown() || !next->IsEnabled() )
+            next = wxTheApp ? wxTheApp->GetTopWindow() : NULL;
+
+        wxTopLevelWindow * const
+            tlw = wxDynamicCast(next, wxTopLevelWindow);
+        if ( tlw && tlw != this && tlw->IsShown() && tlw->IsEnabled()
+                && !tlw->IsIconized() )
+        {
+            tlw->Raise();
+        }
     }
 
     return true;

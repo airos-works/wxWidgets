@@ -4088,6 +4088,17 @@ void wxTextCtrl::DoDrawTextInRect(wxDC& dc, const wxRect& rectUpdate)
             continue;
         }
 
+        // The hit test finds the character boundaries nearest to the edges
+        // of the update rectangle, so the characters the edges cut through
+        // may be left out although their background was erased: redraw one
+        // more character on each side, the DC clips what is not needed.
+        if ( colStart > colRowStart )
+            colStart--;
+
+        // (not with wrapped lines: the next character may be on the next row)
+        if ( !WrapLines() )
+            colEnd++;
+
         // for single line controls we may additionally cut off everything
         // which is to the right of the last visible position
         if ( IsSingleLine() )

@@ -23,6 +23,7 @@
 #include "wx/haiku/private.h"
 
 #include <InterfaceDefs.h>
+#include <Messenger.h>
 #include <Screen.h>
 
 // implemented in window.cpp
@@ -283,12 +284,13 @@ void wxNonOwnedWindow::Init()
     m_decoLeft = m_decoTop = m_decoRight = m_decoBottom = 0;
     m_decoValid = false;
     m_lastFocus = NULL;
-    m_frameSyncPending = 0;
+    m_frameSerial = 0;
     m_isModal = false;
     m_isActive = false;
     m_windowShown = false;
     m_sizeEventSent = false;
     m_shownOnce = false;
+    m_autoPosition = false;
 
     m_isShown = false;
 }
@@ -341,6 +343,8 @@ bool wxNonOwnedWindow::Create(wxWindow *parent,
     wxPoint position(pos);
     if ( position.x == wxDefaultCoord || position.y == wxDefaultCoord )
     {
+        m_autoPosition = true;
+
         // cascade the windows which don't care where they are
         const int offset = 40 + (gs_cascade++ % 10) * 24;
         if ( position.x == wxDefaultCoord )
@@ -400,22 +404,25 @@ void wxNonOwnedWindow::HaikuUpdateWindowType()
     if ( m_isModal )
         feel = B_MODAL_APP_WINDOW_FEEL;
 
-    wxHaikuWindowLock lock(m_window);
-    if ( !lock.IsLocked() )
-        return;
-
     bool lookChanged = false;
-    if ( m_window->Look() != (window_look)look )
+
     {
-        m_window->SetLook((window_look)look);
-        lookChanged = true;
+        wxHaikuWindowLock lock(m_window);
+        if ( !lock.IsLocked() )
+            return;
+
+        if ( m_window->Look() != (window_look)look )
+        {
+            m_window->SetLook((window_look)look);
+            lookChanged = true;
+        }
+
+        if ( m_window->Feel() != (window_feel)feel )
+            m_window->SetFeel((window_feel)feel);
+
+        if ( m_window->Flags() != flags )
+            m_window->SetFlags(flags);
     }
-
-    if ( m_window->Feel() != (window_feel)feel )
-        m_window->SetFeel((window_feel)feel);
-
-    if ( m_window->Flags() != flags )
-        m_window->SetFlags(flags);
 
     if ( lookChanged )
     {
@@ -447,15 +454,23 @@ void wxNonOwnedWindow::HaikuUpdateDecorationInsets()
     if ( m_window->Look() == B_NO_BORDER_WINDOW_LOOK )
         return;
 
+    // Only the sizes are compared: the position BWindow knows may lag behind
+    // the one app_server has. The decorators have the same border on the
+    // left, right and bottom, the rest of the height is the tab.
     const BRect frame = m_window->Frame();
     const BRect deco = m_window->DecoratorFrame();
-    if ( !deco.IsValid() || !deco.Contains(frame) )
+    if ( !deco.IsValid() )
         return;
 
-    m_decoLeft = (int)(frame.left - deco.left);
-    m_decoTop = (int)(frame.top - deco.top);
-    m_decoRight = (int)(deco.right - frame.right);
-    m_decoBottom = (int)(deco.bottom - frame.bottom);
+    const int extraW = (int)(deco.Width() - frame.Width()),
+              extraH = (int)(deco.Height() - frame.Height());
+    if ( extraW < 0 || extraH < 0 || extraW > 200 || extraH > 400 )
+        return;
+
+    m_decoLeft = extraW / 2;
+    m_decoRight = extraW - m_decoLeft;
+    m_decoBottom = wxMin(m_decoRight, extraH);
+    m_decoTop = extraH - m_decoBottom;
 }
 
 void wxNonOwnedWindow::HaikuGetDecorationInsets(int *left, int *top,
@@ -576,6 +591,9 @@ void wxNonOwnedWindow::DoSetSize(int x, int y, int width, int height,
     if ( x == curX && y == curY && width == curW && height == curH )
         return;
 
+    if ( x != curX || y != curY )
+        m_autoPosition = false;
+
     DoMoveWindow(x, y, width, height);
 }
 
@@ -592,35 +610,34 @@ void wxNonOwnedWindow::HaikuSetContentRect(const wxRect& content)
     if ( !m_window )
         return;
 
+    // The looper thread moves and resizes the window (see
+    // wxHAIKU_MSG_SET_FRAME): this thread waits for it, which is safe as the
+    // looper never waits for this thread, but it must not hold the lock of
+    // the window meanwhile.
+    wxASSERT_MSG( !m_window->IsLocked(),
+                  wxS("window must not be locked when its frame is set") );
+
     wxRect actual(content);
 
+    BMessage request(wxHAIKU_MSG_SET_FRAME);
+    request.AddRect("frame", wxHaikuRect(content));
+
+    BMessage reply;
+    BRect frame;
+    int32 serial;
+    if ( BMessenger(m_window).SendMessage(&request, &reply, 2000000, 2000000) == B_OK
+            && reply.FindRect("frame", &frame) == B_OK
+            && reply.FindInt32("serial", &serial) == B_OK )
     {
-        wxHaikuWindowLock lock(m_window);
-        if ( !lock.IsLocked() )
-            return;
-
-        const BRect frame = m_window->Frame();
-        const wxRect current = wxFromHaikuRect(frame);
-
-        if ( current.GetPosition() != content.GetPosition() )
-            m_window->MoveTo(content.x, content.y);
-        if ( current.GetSize() != content.GetSize() )
-            m_window->ResizeTo(content.width - 1, content.height - 1);
-
-        // Both calls are synchronous: this is what the window got (the size
-        // limits may have changed what was asked for).
-        actual = wxFromHaikuRect(m_window->Frame());
-
-        // The looper will report these changes too, after the reports of
-        // what the user did before: they are all out of date by the time
-        // they arrive. Ignore the frame reports until the looper gets this
-        // message, which is queued behind them.
-        if ( actual != current )
-        {
-            m_frameSyncPending++;
-            m_window->PostMessage(wxHAIKU_MSG_FRAME_SYNC);
-        }
+        actual = wxFromHaikuRect(frame);
+        m_frameSerial = serial;
     }
+
+    wxHAIKU_TRACE("set frame tlw=%u want=%d,%d %dx%d got=%d,%d %dx%d serial=%d",
+                  (unsigned)m_handle, content.x, content.y,
+                  content.width, content.height,
+                  actual.x, actual.y, actual.width, actual.height,
+                  (int)m_frameSerial);
 
     HaikuFrameChanged(actual);
 }
@@ -1031,14 +1048,14 @@ void wxNonOwnedWindow::HaikuHandleEvent(const wxHaikuEvent& event)
     switch ( event.type )
     {
         case wxHAIKU_EVT_FRAME:
-            if ( event.flag )
-            {
-                // the answer to wxHAIKU_MSG_FRAME_SYNC
-                if ( m_frameSyncPending > 0 )
-                    m_frameSyncPending--;
-            }
+            // reports from before the last change this thread asked for
+            // are out of date
+            wxHAIKU_TRACE("frame tlw=%u %g,%g %gx%g serial=%d (ours %d)",
+                          (unsigned)m_handle, event.rect.left, event.rect.top,
+                          event.rect.Width() + 1, event.rect.Height() + 1,
+                          (int)event.value, (int)m_frameSerial);
 
-            if ( !m_frameSyncPending )
+            if ( event.value >= m_frameSerial )
                 HaikuFrameChanged(wxFromHaikuRect(event.rect));
             break;
 
