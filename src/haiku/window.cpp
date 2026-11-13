@@ -21,6 +21,7 @@
 #include "wx/dnd.h"
 #include "wx/hashmap.h"
 #include "wx/popupwin.h"
+#include "wx/scrolbar.h"
 #include "wx/tooltip.h"
 #include "wx/vector.h"
 
@@ -1009,13 +1010,16 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
         }
     }
 
-    // The size limits constrain top level windows only. A child gets the
-    // size it is given, as in wxMSW and wxOSX: sizers respect the minimal
-    // size themselves, and controls which lay out their children by hand
+    // The size limits constrain top level windows. A child gets the size it
+    // is given, as in wxMSW and wxOSX: sizers respect the minimal size
+    // themselves, and controls which lay out their children by hand
     // (BambuStudio's TextInput makes its wxTextCtrl narrower than the 100
     // pixels of its best width to leave room for the unit) must get what
-    // they ask for.
-    if ( IsTopLevel() )
+    // they ask for. The exception are wxUniv's scroll bars, which
+    // PositionScrollbars() squeezes into windows of any size and which do
+    // not work below their minimal size (BambuStudio's MonitorPanel crashed
+    // at start-up with scroll bars of scrolled windows 0 pixels wide).
+    if ( IsTopLevel() || wxDynamicCast(this, wxScrollBar) )
     {
         const int maxWidth = GetMaxWidth(),
                   minWidth = GetMinWidth(),
