@@ -187,6 +187,8 @@ wxHaikuPaintSession::~wxHaikuPaintSession()
         m_view->Sync();
         m_bitmap->Unlock();
 
+        wxHaikuViewSynced(m_view);
+
         wxHaikuViewLock lock(target);
         if ( lock.IsLocked() )
         {

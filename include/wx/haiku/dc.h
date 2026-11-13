@@ -212,8 +212,9 @@ protected:
     bool HaikuBegin(DrawWith what);
     void HaikuEnd();
 
-    // draws a part of a native bitmap
-    void HaikuDrawBitmapPart(BBitmap *bitmap, bool blend,
+    // draws a part of the bitmap (rectangles in pixels of the bitmap and
+    // of the view)
+    void HaikuDrawBitmapPart(const wxBitmap& bmp, bool useMask,
                              const wxRect& src, const wxRect& dst);
 
     // a colour copy of a monochrome bitmap in the text colours

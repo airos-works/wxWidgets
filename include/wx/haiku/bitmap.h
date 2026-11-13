@@ -148,6 +148,10 @@ public:
     // the pixels were changed behind the back of this object (by drawing)
     void HaikuTouch();
 
+    // a drawing command using the native bitmap was sent: the native bitmap
+    // must outlive its execution (see wxHaikuBitmapDrawn())
+    void HaikuSetDrawSerial(wxUint32 serial) const;
+
     // direct access to the pixels after flushing pending drawing: 4 bytes
     // per pixel in B, G, R, A order, rows are HaikuGetRowBytes() apart
     unsigned char *HaikuGetBits() const;

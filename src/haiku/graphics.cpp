@@ -1938,6 +1938,7 @@ void wxHaikuContext::FillPath(const wxGraphicsPath& path,
                                      BRect((float)bx, (float)by,
                                            (float)(bx + bw), (float)(by + bh)),
                                      B_ORIGIN);
+        wxHaikuBitmapDrawn(m_view, brush->m_stipple);
         m_view->PopState();
     }
     else
@@ -2222,6 +2223,7 @@ void wxHaikuContext::DrawBitmap(const wxBitmap& bmp,
         options = B_FILTER_BITMAP_BILINEAR;
 
     m_view->DrawBitmapAsync(native, src, dst, options);
+    wxHaikuBitmapDrawn(m_view, bmp);
 
     End();
 }

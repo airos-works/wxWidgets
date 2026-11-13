@@ -818,6 +818,7 @@ void wxHaikuDCImpl::DoDrawRectangle(wxCoord x, wxCoord y,
 
                 m_view->DrawTiledBitmapAsync(stipple->GetHaikuDrawBitmap(true),
                                              rect, BPoint(0, 0));
+                wxHaikuBitmapDrawn(m_view, *stipple);
             }
         }
         else
@@ -1191,9 +1192,12 @@ void wxHaikuDCImpl::DoDrawRotatedText(const wxString& text,
 // bitmaps
 // ----------------------------------------------------------------------------
 
-void wxHaikuDCImpl::HaikuDrawBitmapPart(BBitmap *bitmap, bool blend,
+void wxHaikuDCImpl::HaikuDrawBitmapPart(const wxBitmap& bmp, bool useMask,
                                         const wxRect& src, const wxRect& dst)
 {
+    BBitmap * const bitmap = bmp.GetHaikuDrawBitmap(useMask);
+    const bool blend = bmp.HaikuNeedsAlphaBlend(useMask);
+
     if ( !bitmap || src.IsEmpty() || dst.IsEmpty() )
         return;
 
@@ -1222,6 +1226,9 @@ void wxHaikuDCImpl::HaikuDrawBitmapPart(BBitmap *bitmap, bool blend,
     else
         m_view->DrawBitmapAsync(bitmap, s, d);
 
+    // the native bitmap must not be deleted before this was executed
+    wxHaikuBitmapDrawn(m_view, bmp);
+
     HaikuEnd();
 }
 
@@ -1244,8 +1251,7 @@ void wxHaikuDCImpl::DoDrawBitmap(const wxBitmap& bmp, wxCoord x, wxCoord y,
         toDraw = HaikuColouriseMono(bmp);
     }
 
-    HaikuDrawBitmapPart(toDraw.GetHaikuDrawBitmap(useMask),
-                        toDraw.HaikuNeedsAlphaBlend(useMask),
+    HaikuDrawBitmapPart(toDraw, useMask,
                         wxRect(0, 0, w, h),
                         wxRect(XV(x), YV(y), WV(w), HV(h)));
 
@@ -1362,9 +1368,7 @@ bool wxHaikuDCImpl::DoStretchBlit(wxCoord xdest, wxCoord ydest,
     const wxRasterOperationMode oldRop = m_logicalFunction;
     m_logicalFunction = rop;
 
-    HaikuDrawBitmapPart(bitmap->GetHaikuDrawBitmap(useMask),
-                        bitmap->HaikuNeedsAlphaBlend(useMask),
-                        src, dst);
+    HaikuDrawBitmapPart(*bitmap, useMask, src, dst);
 
     m_logicalFunction = oldRop;
 

@@ -25,6 +25,9 @@
 #include "wx/haiku/private.h"
 
 #include <list>
+#include <vector>
+
+#include <pthread.h>
 
 // ============================================================================
 // wxBitmapRefData
@@ -45,6 +48,35 @@ std::list<wxBitmapRefData *> gs_idleDrawBitmaps;
 
 const size_t MAX_IDLE_DRAW_BITMAPS = 12;
 const int KEEP_DRAW_BITMAP_PIXELS = 128 * 128;
+
+// see wxHaikuBitmapDrawn() in wx/haiku/private.h
+pthread_mutex_t gs_pendingLock = PTHREAD_MUTEX_INITIALIZER;
+std::vector<BView *> gs_pendingViews;
+std::vector<BBitmap *> gs_graveyard;
+size_t gs_graveyardBytes = 0;
+wxUint32 gs_drawSerial = 0;
+wxUint32 gs_syncedSerial = 0;
+
+// deletes the native bitmap, now or when the drawing using it is done
+void DeleteNativeBitmap(BBitmap *bitmap, wxUint32 drawSerial)
+{
+    if ( !bitmap )
+        return;
+
+    if ( drawSerial > gs_syncedSerial )
+    {
+        gs_graveyard.push_back(bitmap);
+        gs_graveyardBytes += bitmap->BitsLength();
+
+        // don't let them pile up when nothing synchronizes for long
+        if ( gs_graveyard.size() > 256 || gs_graveyardBytes > 64 * 1024 * 1024 )
+            wxHaikuSyncPendingDraws();
+    }
+    else
+    {
+        delete bitmap;
+    }
+}
 
 BBitmap *NewNativeBitmap(int width, int height, bool acceptViews)
 {
@@ -106,8 +138,8 @@ public:
             gs_idleDrawBitmaps.remove(this);
 
         // the view is deleted with the bitmap it is attached to
-        delete m_bitmap;
-        delete m_masked;
+        DeleteNativeBitmap(m_bitmap, m_drawSerial);
+        DeleteNativeBitmap(m_masked, m_drawSerial);
         delete m_mask;
     }
 
@@ -123,6 +155,8 @@ public:
             {
                 m_view->Sync();
                 m_bitmap->Unlock();
+
+                wxHaikuViewSynced(m_view);
             }
         }
 
@@ -159,7 +193,7 @@ public:
 
         CopyPixels(bitmap, m_bitmap);
 
-        delete m_bitmap;
+        DeleteNativeBitmap(m_bitmap, m_drawSerial);
         m_bitmap = bitmap;
         m_view = NULL;
         m_acceptsViews = acceptViews;
@@ -169,7 +203,7 @@ public:
 
     void InvalidateMasked()
     {
-        delete m_masked;
+        DeleteNativeBitmap(m_masked, m_drawSerial);
         m_masked = NULL;
     }
 
@@ -187,6 +221,9 @@ public:
     // the pixels with the mask applied to the alpha channel
     BBitmap *m_masked;
 
+    // when the native bitmaps were last used by a drawing command
+    mutable wxUint32 m_drawSerial;
+
 private:
     void Init()
     {
@@ -199,6 +236,7 @@ private:
         m_needsSync = false;
         m_mask = NULL;
         m_masked = NULL;
+        m_drawSerial = 0;
     }
 };
 
@@ -861,8 +899,7 @@ BBitmap *wxBitmap::GetHaikuDrawBitmap(bool useMask) const
     if ( M_BITMAP->m_masked && !M_BITMAP->m_needsSync )
         return M_BITMAP->m_masked;
 
-    delete M_BITMAP->m_masked;
-    M_BITMAP->m_masked = NULL;
+    M_BITMAP->InvalidateMasked();
 
     BBitmap * const src = GetHaikuBitmap();
     BBitmap * const masked = NewNativeBitmap(M_BITMAP->m_width,
@@ -895,6 +932,12 @@ BBitmap *wxBitmap::GetHaikuDrawBitmap(bool useMask) const
 
     M_BITMAP->m_masked = masked;
     return masked;
+}
+
+void wxBitmap::HaikuSetDrawSerial(wxUint32 serial) const
+{
+    if ( IsOk() )
+        M_BITMAP->m_drawSerial = serial;
 }
 
 void wxBitmap::HaikuTouch()
@@ -976,6 +1019,106 @@ void wxBitmap::HaikuEndDrawing()
         oldest->m_idle = false;
         oldest->Convert(false);
     }
+}
+
+// ----------------------------------------------------------------------------
+// bitmaps drawn asynchronously
+// ----------------------------------------------------------------------------
+
+wxHaikuDrawView::~wxHaikuDrawView()
+{
+    // may run on a looper thread (the root view of a window being quit)
+    pthread_mutex_lock(&gs_pendingLock);
+    for ( size_t n = 0; n < gs_pendingViews.size(); n++ )
+    {
+        if ( gs_pendingViews[n] == this )
+        {
+            gs_pendingViews.erase(gs_pendingViews.begin() + n);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&gs_pendingLock);
+}
+
+void wxHaikuBitmapDrawn(BView *target, const wxBitmap& bitmap)
+{
+    bitmap.HaikuSetDrawSerial(++gs_drawSerial);
+
+    pthread_mutex_lock(&gs_pendingLock);
+    bool found = false;
+    for ( size_t n = 0; n < gs_pendingViews.size(); n++ )
+    {
+        if ( gs_pendingViews[n] == target )
+        {
+            found = true;
+            break;
+        }
+    }
+    if ( !found )
+        gs_pendingViews.push_back(target);
+    pthread_mutex_unlock(&gs_pendingLock);
+}
+
+static void FreeGraveyardIfDone()
+{
+    pthread_mutex_lock(&gs_pendingLock);
+    const bool done = gs_pendingViews.empty();
+    pthread_mutex_unlock(&gs_pendingLock);
+
+    if ( !done )
+        return;
+
+    // everything sent so far has been executed
+    gs_syncedSerial = gs_drawSerial;
+
+    for ( size_t n = 0; n < gs_graveyard.size(); n++ )
+        delete gs_graveyard[n];
+    gs_graveyard.clear();
+    gs_graveyardBytes = 0;
+}
+
+void wxHaikuViewSynced(BView *view)
+{
+    pthread_mutex_lock(&gs_pendingLock);
+    for ( size_t n = 0; n < gs_pendingViews.size(); n++ )
+    {
+        if ( gs_pendingViews[n] == view )
+        {
+            gs_pendingViews.erase(gs_pendingViews.begin() + n);
+            break;
+        }
+    }
+    pthread_mutex_unlock(&gs_pendingLock);
+
+    if ( !gs_graveyard.empty() )
+        FreeGraveyardIfDone();
+}
+
+void wxHaikuSyncPendingDraws()
+{
+    for ( ;; )
+    {
+        pthread_mutex_lock(&gs_pendingLock);
+        BView * const view = gs_pendingViews.empty() ? NULL
+                                                     : gs_pendingViews.back();
+        if ( view )
+            gs_pendingViews.pop_back();
+        pthread_mutex_unlock(&gs_pendingLock);
+
+        if ( !view )
+            break;
+
+        // The views are only destroyed by this thread, except for the root
+        // views of windows, which this thread destroys by quitting the
+        // window: the pointer is valid here.
+        if ( view->Window() && view->LockLooper() )
+        {
+            view->Sync();
+            view->UnlockLooper();
+        }
+    }
+
+    FreeGraveyardIfDone();
 }
 
 // ----------------------------------------------------------------------------
