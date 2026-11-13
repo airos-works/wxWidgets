@@ -273,6 +273,19 @@ wxString SubstituteFace(const wxString& face)
     return result;
 }
 
+// What wxFontRefData::Realize() found for the attributes of a font: every
+// wxFont would otherwise look at the styles of its family again (several
+// app_server round trips each), and every control has its own wxFont.
+struct RealizedFont
+{
+    BFont font;
+    wxString realFace;
+    bool fixedWidth;
+};
+
+typedef std::map<wxString, RealizedFont> RealizedFontMap;
+RealizedFontMap gs_realizedFonts;
+
 } // anonymous namespace
 
 void wxHaikuResetSystemSettings()
@@ -280,6 +293,9 @@ void wxHaikuResetSystemSettings()
     gs_scaleFactor = 0;
     ClearFontCaches();
     gs_familyNames.clear();
+
+    // the system fonts (the defaults of the families) may have changed
+    gs_realizedFonts.clear();
 }
 
 // ============================================================================
@@ -363,6 +379,21 @@ void wxFontRefData::Realize() const
 {
     m_realized = true;
     m_cache = NULL;
+
+    // the same attributes give the same font
+    const float size = (float)(floor(GetPixelHeight() * 2 + 0.5) / 2);
+    const wxString key = wxString::Format("%d|%d|%d|%g|", (int)m_info.family,
+                                          m_info.style != wxFONTSTYLE_NORMAL,
+                                          m_info.weight, size)
+                            + m_info.faceName;
+    const RealizedFontMap::const_iterator it = gs_realizedFonts.find(key);
+    if ( it != gs_realizedFonts.end() )
+    {
+        m_font = it->second.font;
+        m_realFace = it->second.realFace;
+        m_fixedWidth = it->second.fixedWidth;
+        return;
+    }
 
     // the family
     font_family family;
@@ -464,7 +495,7 @@ void wxFontRefData::Realize() const
     if ( wantWeight >= wxFONTWEIGHT_SEMIBOLD && bestWeight < wxFONTWEIGHT_MEDIUM )
         font.SetFalseBoldWidth(0.6f);
 
-    font.SetSize((float)(floor(GetPixelHeight() * 2 + 0.5) / 2));
+    font.SetSize(size);
     font.SetRotation(0);
     font.SetSpacing(B_BITMAP_SPACING);
 
@@ -475,6 +506,11 @@ void wxFontRefData::Realize() const
     font.GetFamilyAndStyle(&realFamily, &realStyle);
     m_realFace = wxString::FromUTF8(realFamily);
     m_fixedWidth = font.IsFixed();
+
+    RealizedFont& realized = gs_realizedFonts[key];
+    realized.font = m_font;
+    realized.realFace = m_realFace;
+    realized.fixedWidth = m_fixedWidth;
 }
 
 #define M_FONTDATA (static_cast<wxFontRefData *>(m_refData))
@@ -871,6 +907,7 @@ bool wxFontBase::AddPrivateFont(const wxString& filename)
 
     // names looked up before may resolve differently now
     gs_familyNames.clear();
+    gs_realizedFonts.clear();
 
     return true;
 }
