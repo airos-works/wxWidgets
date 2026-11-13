@@ -1036,6 +1036,10 @@ ldlibs_xml="@EXTRALIBS_XML@"
 ldlibs_stc="@EXTRALIBS_STC@"
 ldlibs_webview="@EXTRALIBS_WEBVIEW@"
 
+# Only the CMake build substitutes this one (libcurl for wxWebRequest).
+ldlibs_net="@EXTRALIBS_NET@"
+case "$ldlibs_net" in @*@) ldlibs_net="" ;; esac
+
 
 # Order the libraries passed to us correctly for static linking.
 #

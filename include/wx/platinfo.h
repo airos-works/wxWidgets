@@ -46,15 +46,17 @@ enum wxOperatingSystemId
     wxOS_UNIX_SOLARIS   = 1 << 10,      // SunOS
     wxOS_UNIX_AIX       = 1 << 11,      // AIX
     wxOS_UNIX_HPUX      = 1 << 12,      // HP/UX
+    wxOS_UNIX_HAIKU     = 1 << 13,      // Haiku (air/OS)
     wxOS_UNIX = wxOS_UNIX_LINUX     |
                 wxOS_UNIX_FREEBSD   |
                 wxOS_UNIX_OPENBSD   |
                 wxOS_UNIX_NETBSD    |
                 wxOS_UNIX_SOLARIS   |
                 wxOS_UNIX_AIX       |
-                wxOS_UNIX_HPUX,
+                wxOS_UNIX_HPUX      |
+                wxOS_UNIX_HAIKU,
 
-    // 1<<13 and 1<<14 available for other Unix flavours
+    // 1<<14 available for other Unix flavours
 
     wxOS_DOS            = 1 << 15,      // obsolete
     wxOS_OS2            = 1 << 16       // obsolete

@@ -35,6 +35,11 @@
 #include "wx/snglinst.h"
 
 #include <unistd.h>
+#ifdef __HAIKU__
+    #include <FindDirectory.h>
+    #include <limits.h>
+#endif
+
 #include <sys/types.h>
 #include <sys/stat.h>           // for S_I[RW]USR
 #include <signal.h>             // for kill()
@@ -358,6 +363,17 @@ bool wxSingleInstanceChecker::Create(const wxString& name,
     m_impl = new wxSingleInstanceCheckerImpl;
 
     wxString fullname = path;
+#ifdef __HAIKU__
+    if ( fullname.empty() )
+    {
+        // not in the home directory, which is what the user sees in Tracker:
+        // the place for such files is ~/config/var
+        char var[PATH_MAX];
+        if ( find_directory(B_USER_VAR_DIRECTORY, -1, true /* create */,
+                            var, sizeof(var)) == B_OK )
+            fullname = wxString::FromUTF8(var);
+    }
+#endif // __HAIKU__
     if ( fullname.empty() )
     {
         fullname = wxGetHomeDir();

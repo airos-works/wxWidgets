@@ -382,8 +382,16 @@ if(wxUSE_GUI)
         set(wxUSE_THEME_GTK OFF)
         set(wxUSE_THEME_METAL OFF)
         set(wxUSE_THEME_MONO OFF)
-        # the base of the other themes, the fallback if the port has none
-        set(wxUSE_THEME_WIN32 ON)
+        set(wxUSE_THEME_HAIKU OFF)
+        if(WXHAIKU)
+            # wxHaiku has its own theme drawing through BControlLook; it does
+            # not use any code of the win32 theme
+            set(wxUSE_THEME_HAIKU ON)
+            set(wxUSE_THEME_WIN32 OFF)
+        else()
+            # the base of the other themes
+            set(wxUSE_THEME_WIN32 ON)
+        endif()
     endif()
 
     # WXHAIKU checks, match include/wx/haiku/chkconf.h
@@ -524,6 +532,11 @@ if(wxUSE_GUI)
                 message(WARNING "webkit not found or enabled, wxWebview won't be available")
                 wx_option_force_value(wxUSE_WEBVIEW OFF)
             endif()
+        elseif(WXHAIKU)
+            # none of the backends of the other ports; the port's own one
+            # plugs in at run time (src/haiku/webview_haiku.cpp)
+            set(wxUSE_WEBVIEW_WEBKIT OFF)
+            set(wxUSE_WEBVIEW_WEBKIT2 OFF)
         endif()
     endif()
 

@@ -2317,8 +2317,15 @@
 #   endif
 #endif /* wxUSE_TREELISTCTRL */
 
+/*
+    The Haiku port has no wxUSE_WEBVIEW_XXX symbol: its backend, if any, is
+    registered through the function in src/haiku/webview_haiku.cpp. (The test
+    is for the system, not for __WXHAIKU__, as this file is also included by
+    code compiled without the toolkit symbols.)
+ */
 #if wxUSE_WEBVIEW && !(wxUSE_WEBVIEW_WEBKIT || wxUSE_WEBVIEW_WEBKIT2 || \
-                       wxUSE_WEBVIEW_IE || wxUSE_WEBVIEW_EDGE)
+                       wxUSE_WEBVIEW_IE || wxUSE_WEBVIEW_EDGE || \
+                       defined(__HAIKU__))
 #   ifdef wxABORT_ON_CONFIG_ERROR
 #       error "wxUSE_WEBVIEW requires at least one backend"
 #   else

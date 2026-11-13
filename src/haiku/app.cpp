@@ -42,8 +42,11 @@ const uint32 kMsgReallyQuit = 'wxQT';
 class wxHaikuApplication : public BApplication
 {
 public:
-    wxHaikuApplication(const char *signature)
-        : BApplication(signature),
+    // With the error argument BApplication reports a failure instead of
+    // calling exit() itself (B_ALREADY_RUNNING for single launch
+    // applications, after it passed argv on to the running instance).
+    wxHaikuApplication(const char *signature, status_t *error)
+        : BApplication(signature, error),
           m_ready(false),
           m_reallyQuit(false)
     {
@@ -79,9 +82,26 @@ public:
         if ( !m_ready )
             return;
 
+        // the arguments of another launch are relative to its directory
+        const char *cwd = NULL;
+        BMessage * const message = CurrentMessage();
+        if ( message )
+            message->FindString("cwd", &cwd);
+
         wxHaikuEvent *event = new wxHaikuEvent(wxHAIKU_EVT_APP_ARGV);
         for ( int32 i = 0; i < argc; i++ )
-            event->strings.push_back(argv[i]);
+        {
+            std::string arg(argv[i]);
+            if ( i > 0 && cwd && !arg.empty() && arg[0] != '-' && arg[0] != '/'
+                    && arg.find("://") == std::string::npos )
+            {
+                BPath path(cwd, arg.c_str());
+                if ( path.InitCheck() == B_OK )
+                    arg = path.Path();
+            }
+
+            event->strings.push_back(arg);
+        }
         wxHaikuPostEvent(event);
     }
 
@@ -108,6 +128,16 @@ public:
         wxHaikuPostEvent(event);
     }
 
+    virtual void DispatchMessage(BMessage *message, BHandler *handler)
+    {
+        // BApplication::DispatchMessage() passes B_COLORS_UPDATED on to the
+        // windows itself: MessageReceived() never sees it.
+        if ( message->what == B_COLORS_UPDATED )
+            wxHaikuPostEvent(new wxHaikuEvent(wxHAIKU_EVT_COLORS_UPDATED));
+
+        BApplication::DispatchMessage(message, handler);
+    }
+
     virtual void MessageReceived(BMessage *message)
     {
         switch ( message->what )
@@ -115,11 +145,6 @@ public:
             case kMsgReallyQuit:
                 m_reallyQuit = true;
                 Quit();
-                break;
-
-            case B_COLORS_UPDATED:
-                wxHaikuPostEvent(new wxHaikuEvent(wxHAIKU_EVT_COLORS_UPDATED));
-                BApplication::MessageReceived(message);
                 break;
 
             case B_FONTS_UPDATED:
@@ -139,6 +164,7 @@ private:
 
 thread_id gs_appThread = -1;
 sem_id gs_appReady = -1;
+status_t gs_appError = B_OK;
 std::string gs_signature;
 
 // path of the executable of this team
@@ -190,7 +216,15 @@ std::string GetDefaultSignature()
 
 int32 AppThreadEntry(void *)
 {
-    BApplication *app = new wxHaikuApplication(gs_signature.c_str());
+    BApplication *app = new wxHaikuApplication(gs_signature.c_str(),
+                                               &gs_appError);
+    if ( gs_appError != B_OK )
+    {
+        // no application: the main thread decides what to do about it
+        delete app;
+        release_sem(gs_appReady);
+        return 0;
+    }
 
     release_sem(gs_appReady);
 
@@ -222,6 +256,14 @@ bool StartApplicationThread()
         ;
     delete_sem(gs_appReady);
     gs_appReady = -1;
+
+    if ( gs_appError != B_OK )
+    {
+        status_t result;
+        wait_for_thread(gs_appThread, &result);
+        gs_appThread = -1;
+        return false;
+    }
 
     return be_app != NULL;
 }
@@ -280,6 +322,14 @@ bool wxApp::Initialize(int& argc_, wxChar **argv_)
 
     if ( !StartApplicationThread() )
     {
+        if ( gs_appError == B_ALREADY_RUNNING )
+        {
+            // A single launch application which runs already: its instance
+            // got our arguments (B_ARGV_RECEIVED) and was activated, there
+            // is nothing left to do for this process.
+            exit(0);
+        }
+
         wxLogError(_("Could not connect to the application server."));
         return false;
     }

@@ -193,6 +193,13 @@ void wxHaikuView::MouseDown(BPoint where)
     // with the button down
     SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
 
+    // A window which accepts the first click (ours do: the click which
+    // activates a window also works in it) is not activated by app_server
+    // when its contents are clicked: that is left to the views.
+    BWindow * const window = Window();
+    if ( window && !window->IsActive() && !(window->Flags() & B_AVOID_FOCUS) )
+        window->Activate(true);
+
     wxHaikuPostMouseEvent(this, m_handle, wxHAIKU_EVT_MOUSE_DOWN, where);
 }
 
@@ -228,7 +235,8 @@ void wxHaikuView::MessageReceived(BMessage *message)
 wxHaikuWindow::wxHaikuWindow(wxUint32 handle, BRect frame, const char *title,
                              window_look look, window_feel feel, uint32 flags)
     : BWindow(frame, title, look, feel, flags),
-      m_handle(handle)
+      m_handle(handle),
+      m_frameSerial(0)
 {
 }
 
@@ -308,20 +316,38 @@ void wxHaikuWindow::DispatchMessage(BMessage *message, BHandler *target)
 
 void wxHaikuWindow::MessageReceived(BMessage *message)
 {
-    if ( message->what == wxHAIKU_MSG_FRAME_SYNC )
+    if ( message->what == wxHAIKU_MSG_SET_FRAME )
     {
-        PostFrame(true);
+        BRect frame;
+        if ( message->FindRect("frame", &frame) == B_OK )
+        {
+            const BRect current = Frame();
+            if ( frame.LeftTop() != current.LeftTop() )
+                MoveTo(frame.LeftTop());
+            if ( frame.Width() != current.Width()
+                    || frame.Height() != current.Height() )
+            {
+                ResizeTo(frame.Width(), frame.Height());
+            }
+        }
+
+        m_frameSerial++;
+
+        BMessage reply(B_REPLY);
+        reply.AddRect("frame", Frame());
+        reply.AddInt32("serial", m_frameSerial);
+        message->SendReply(&reply);
         return;
     }
 
     BWindow::MessageReceived(message);
 }
 
-void wxHaikuWindow::PostFrame(bool sync)
+void wxHaikuWindow::PostFrame()
 {
     wxHaikuEvent *event = new wxHaikuEvent(wxHAIKU_EVT_FRAME, m_handle);
     event->rect = Frame();
-    event->flag = sync;
+    event->value = m_frameSerial;
     wxHaikuPostEvent(event);
 }
 

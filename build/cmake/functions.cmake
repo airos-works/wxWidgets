@@ -211,7 +211,10 @@ function(wx_set_target_properties target_name is_base)
         endif()
     else()
         set(cross_target "")
-        if (CMAKE_CROSSCOMPILING)
+        if (CMAKE_CROSSCOMPILING AND NOT HAIKU)
+            # (Not for Haiku, which is always built from another system: the
+            # names are those a build on Haiku itself would have, and
+            # wx-config has no host to select.)
             set(cross_target "-${CMAKE_SYSTEM_NAME}")
         endif ()
 
@@ -292,7 +295,9 @@ function(wx_set_target_properties target_name is_base)
             PUBLIC ${WIN32_LIBRARIES})
     endif()
 
-    if(wxTOOLKIT_LIBRARIES)
+    if(wxTOOLKIT_LIBRARIES AND NOT (WXHAIKU AND is_base))
+        # (the Haiku toolkit libraries are libbe and friends: programs using
+        # wxBase only have no use for them)
         target_link_libraries(${target_name}
             PUBLIC ${wxTOOLKIT_LIBRARIES})
     endif()

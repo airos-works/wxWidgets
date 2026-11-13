@@ -123,7 +123,8 @@ wxDECLARE_EXPORTED_EVENT( WXDLLIMPEXP_CORE, wxEVT_NOTIFICATION_MESSAGE_ACTION, w
 
 #if (defined(__WXGTK__) && wxUSE_LIBNOTIFY) || \
     (defined(__WXMSW__) && wxUSE_TASKBARICON && wxUSE_TASKBARICON_BALLOONS) || \
-    defined(__WXOSX_COCOA__)
+    defined(__WXOSX_COCOA__) || \
+    defined(__WXHAIKU__)
     #define wxHAS_NATIVE_NOTIFICATION_MESSAGE
 #endif
 

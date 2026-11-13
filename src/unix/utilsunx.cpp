@@ -141,6 +141,11 @@
     #include <sys/resource.h>   // for setpriority()
 #endif
 
+#ifdef __HAIKU__
+    #include <OS.h>             // for get_system_info()
+    #include <sys/utsname.h>
+#endif
+
 // ----------------------------------------------------------------------------
 // conditional compilation
 // ----------------------------------------------------------------------------
@@ -1090,6 +1095,13 @@ bool wxIsPlatform64Bit()
 
 wxString wxGetCpuArchitectureName()
 {
+#ifdef __HAIKU__
+    // no need to run a program for this
+    struct utsname uts;
+    if ( uname(&uts) == 0 )
+        return wxString::FromAscii(uts.machine);
+#endif // __HAIKU__
+
     return wxGetCommandOutput(wxT("uname -m"));
 }
 
@@ -1127,8 +1139,9 @@ wxLinuxDistributionInfo wxGetLinuxDistributionInfo()
 }
 #endif // __LINUX__
 
-// these functions are in src/osx/utils_base.mm for wxOSX.
-#ifndef __DARWIN__
+// these functions are in src/osx/utils_base.mm for wxOSX and in
+// src/haiku/utilsbase.cpp for Haiku.
+#if !defined(__DARWIN__) && !defined(__HAIKU__)
 
 wxOperatingSystemId wxGetOsVersion(int *verMaj, int *verMin, int *verMicro)
 {
@@ -1181,7 +1194,7 @@ bool wxCheckOsVersion(int majorVsn, int minorVsn, int microVsn)
         || (majorCur == majorVsn && minorCur == minorVsn && microCur >= microVsn);
 }
 
-#endif // !__DARWIN__
+#endif // !__DARWIN__ && !__HAIKU__
 
 unsigned long wxGetProcessId()
 {
@@ -1248,6 +1261,14 @@ wxMemorySize wxGetFreeMemory()
         fclose(fp);
 
         return memFreeBytes;
+    }
+#elif defined(__HAIKU__)
+    // the pages used for caching files count as free, as on Linux above
+    system_info info;
+    if ( get_system_info(&info) == B_OK && info.max_pages >= info.used_pages )
+    {
+        return (wxMemorySize)(info.max_pages - info.used_pages)
+                    * (wxMemorySize)B_PAGE_SIZE;
     }
 #elif defined(__SGI__)
     struct rminfo realmem;

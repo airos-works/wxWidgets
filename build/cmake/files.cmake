@@ -55,6 +55,17 @@ set(BASE_UNIX_HDR
     wx/unix/stdpaths.h
 )
 
+set(BASE_HAIKU_SRC
+    ${BASE_UNIX_AND_DARWIN_NOTWXMAC_SRC}
+    src/haiku/stdpaths.cpp
+    src/haiku/utilsbase.cpp
+)
+
+set(BASE_HAIKU_HDR
+    ${BASE_UNIX_AND_DARWIN_NOTWXMAC_HDR}
+    wx/haiku/stdpaths.h
+)
+
 set(BASE_WIN32_SRC
     src/msw/basemsw.cpp
     src/msw/crashrpt.cpp
@@ -2293,6 +2304,7 @@ set(HAIKU_LOWLEVEL_SRC
     src/haiku/pen.cpp
     src/haiku/popupwin.cpp
     src/haiku/region.cpp
+    src/haiku/renderer.cpp
     src/haiku/settings.cpp
     src/haiku/tooltip.cpp
     src/haiku/toplevel.cpp
@@ -2321,6 +2333,7 @@ set(HAIKU_LOWLEVEL_HDR
     wx/haiku/dnd.h
     wx/haiku/evtloop.h
     wx/haiku/font.h
+    wx/haiku/look.h
     wx/haiku/nonownedwnd.h
     wx/haiku/pen.h
     wx/haiku/popupwin.h
@@ -2329,6 +2342,26 @@ set(HAIKU_LOWLEVEL_HDR
     wx/haiku/tooltip.h
     wx/haiku/toplevel.h
     wx/haiku/window.h
+)
+
+# The parts of the Haiku port which are not needed to get a window on the
+# screen: native dialogs, system integration, placeholders.
+set(HAIKU_SRC
+    src/common/taskbarcmn.cpp
+    src/haiku/dirdlg.cpp
+    src/haiku/filedlg.cpp
+    src/haiku/filepanel.cpp
+    src/haiku/launch.cpp
+    src/haiku/notifmsg.cpp
+    src/haiku/sound.cpp
+    src/haiku/taskbar.cpp
+)
+
+set(HAIKU_HDR
+    wx/haiku/dirdlg.h
+    wx/haiku/filedlg.h
+    wx/haiku/sound.h
+    wx/haiku/taskbar.h
 )
 
 set(OSX_LOWLEVEL_SRC
@@ -2645,6 +2678,7 @@ set(OSX_IPHONE_HDR
 
 set(UNIV_THEMES_SRC
     src/univ/themes/gtk.cpp
+    src/univ/themes/haiku.cpp
     src/univ/themes/metal.cpp
     src/univ/themes/mono.cpp
     src/univ/themes/win32.cpp
@@ -2816,6 +2850,13 @@ set(MEDIA_UNIX_SRC
 set(MEDIA_UNIX_HDR
 )
 
+set(MEDIA_HAIKU_SRC
+    src/haiku/mediactrl.cpp
+)
+
+set(MEDIA_HAIKU_HDR
+)
+
 set(MEDIA_GTK_SRC
 )
 
@@ -2926,6 +2967,15 @@ set(WEBVIEW_GTK_SRC
 
 set(WEBVIEW2_GTK_SRC
     src/gtk/webview_webkit2.cpp
+)
+
+set(WEBVIEW_HAIKU_HDR
+    wx/haiku/webviewhistoryitem.h
+    wx/haiku/private/webview.h
+)
+
+set(WEBVIEW_HAIKU_SRC
+    src/haiku/webview_haiku.cpp
 )
 
 set(WEBVIEW_WEBKIT2_EXTENSION_SRC

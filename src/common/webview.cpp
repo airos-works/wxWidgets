@@ -21,6 +21,8 @@
 #elif defined(__WXMSW__)
 #include "wx/msw/webview_ie.h"
 #include "wx/msw/webview_edge.h"
+#elif defined(__WXHAIKU__)
+#include "wx/haiku/private/webview.h"
 #endif
 
 // DLL options compatibility check:
@@ -316,6 +318,17 @@ void wxWebView::InitFactoryMap()
         (new wxWebViewFactoryEdge));
 #endif
 
+#elif defined(__WXHAIKU__)
+    // The backend of the port, if the library has one, is the default one
+    // (wxWebViewBackendDefault is wxWebViewBackendWebKit everywhere but on
+    // MSW): see src/haiku/webview_haiku.cpp.
+    if(m_factoryMap.find(wxWebViewBackendWebKit) == m_factoryMap.end())
+    {
+        wxWebViewFactory* const factory = wxHaikuCreateDefaultWebViewFactory();
+        if(factory)
+            RegisterFactory(wxWebViewBackendWebKit,
+                            wxSharedPtr<wxWebViewFactory>(factory));
+    }
 #else
     if(m_factoryMap.find(wxWebViewBackendWebKit) == m_factoryMap.end())
         RegisterFactory(wxWebViewBackendWebKit, wxSharedPtr<wxWebViewFactory>

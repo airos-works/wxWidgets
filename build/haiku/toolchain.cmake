@@ -21,6 +21,15 @@ endif()
 if(NOT HAIKU_DEPS)
     set(HAIKU_DEPS /data1/airos/deps/${HAIKU_ARCH}/boot/system)
 endif()
+# Install prefixes of things built for the target outside the SDK which the
+# project being configured uses (an installed wx, cross-built dependencies):
+#   -DHAIKU_PREFIXES="/prefix/one;/prefix/two"
+# They become find roots: find_package(), find_library() and find_file() look
+# in them and accept paths inside them (CMake's FindwxWidgets checks the
+# directories wx-config names, which it cannot outside the find roots).
+if(NOT HAIKU_PREFIXES)
+    set(HAIKU_PREFIXES "$ENV{HAIKU_PREFIXES}")
+endif()
 if(HAIKU_ARCH STREQUAL "arm64")
     set(CMAKE_SYSTEM_PROCESSOR aarch64)
 else()
@@ -29,7 +38,8 @@ endif()
 file(STRINGS "${HAIKU_SDK}/env.sh" _cross REGEX "^CROSS=")
 string(REGEX REPLACE "^CROSS=" "" HAIKU_CROSS "${_cross}")
 # try_compile projects see the same settings.
-list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES HAIKU_ARCH HAIKU_SDK HAIKU_DEPS)
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES HAIKU_ARCH HAIKU_SDK HAIKU_DEPS
+    HAIKU_PREFIXES)
 set(CMAKE_SYSROOT ${HAIKU_SDK}/sysroot)
 set(CMAKE_C_COMPILER ${HAIKU_CROSS}gcc)
 set(CMAKE_CXX_COMPILER ${HAIKU_CROSS}g++)
@@ -43,7 +53,8 @@ endif()
 # jpeg, tiff... only there).
 set(CMAKE_FIND_ROOT_PATH
     ${CMAKE_SYSROOT}/boot/system ${CMAKE_SYSROOT}/boot/system/develop
-    ${HAIKU_DEPS} ${HAIKU_DEPS}/develop)
+    ${HAIKU_DEPS} ${HAIKU_DEPS}/develop
+    ${HAIKU_PREFIXES})
 set(CMAKE_SYSTEM_INCLUDE_PATH /boot/system/develop/headers /develop/headers /headers)
 set(CMAKE_SYSTEM_LIBRARY_PATH /boot/system/develop/lib /develop/lib /lib)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)

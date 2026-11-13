@@ -43,7 +43,8 @@ class WXDLLIMPEXP_CORE wxTaskBarIconBase : public wxEvtHandler
 public:
     wxTaskBarIconBase() { }
 
-#if defined(__WXGTK__) || defined(__WXX11__) || defined(__WXMOTIF__) || defined(__WXQT__)
+#if defined(__WXGTK__) || defined(__WXX11__) || defined(__WXMOTIF__) || \
+    defined(__WXQT__) || defined(__WXHAIKU__)
     static bool IsAvailable();
 #else
     static bool IsAvailable() { return true; }
@@ -92,6 +93,8 @@ private:
     #include "wx/osx/taskbarosx.h"
 #elif defined (__WXQT__)
     #include "wx/qt/taskbar.h"
+#elif defined (__WXHAIKU__)
+    #include "wx/haiku/taskbar.h"
 #endif
 
 // ----------------------------------------------------------------------------

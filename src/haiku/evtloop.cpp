@@ -120,7 +120,7 @@ wxHaikuEvent *PopEvent()
         // for the same window is of no interest any more
         wxHaikuEvent * const next = gs_queue.head;
         if ( next && next->type == event->type && next->handle == event->handle
-                && ((event->type == wxHAIKU_EVT_FRAME && !event->flag)
+                && (event->type == wxHAIKU_EVT_FRAME
                     || (event->type == wxHAIKU_EVT_MOUSE_MOVED
                         && next->transit == event->transit
                         && next->buttons == event->buttons)) )

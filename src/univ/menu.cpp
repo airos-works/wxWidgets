@@ -39,6 +39,15 @@
 
 #include "wx/univ/renderer.h"
 
+// The items of a popup menu are drawn one pixel up and left of the client
+// area: the themes whose menu border is two pixels wide have their items
+// overlap its inner pixel. The Haiku theme draws the items where they are.
+#ifdef __WXHAIKU__
+    static const int MENU_ORIGIN_SHIFT = 0;
+#else
+    static const int MENU_ORIGIN_SHIFT = 1;
+#endif
+
 #ifdef __WXMSW__
     #include "wx/msw/private.h"
 #endif // __WXMSW__
@@ -539,7 +548,7 @@ void wxPopupMenuWindow::RefreshItem(wxMenuItem *item)
     wxASSERT_MSG( IsShown(), wxT("can't refresh menu which is not shown") );
 
     // FIXME: -1 here because of SetLogicalOrigin(1, 1) in DoDraw()
-    RefreshRect(wxRect(0, item->GetPosition() - 1,
+    RefreshRect(wxRect(0, item->GetPosition() - MENU_ORIGIN_SHIFT,
                 m_menu->GetGeometryInfo().GetSize().x, item->GetHeight()));
 }
 
@@ -553,7 +562,7 @@ void wxPopupMenuWindow::DoDraw(wxControlRenderer *renderer)
 
     // FIXME: this should be done in the renderer, however when it is fixed
     //        wxPopupMenuWindow::RefreshItem() should be changed too!
-    dc.SetLogicalOrigin(1, 1);
+    dc.SetLogicalOrigin(MENU_ORIGIN_SHIFT, MENU_ORIGIN_SHIFT);
 
     wxRenderer *rend = renderer->GetRenderer();
 

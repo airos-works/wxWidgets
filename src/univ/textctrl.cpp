@@ -2408,6 +2408,24 @@ wxSize wxTextCtrl::DoGetBestClientSize() const
     return wxSize(rectTotal.width, rectTotal.height);
 }
 
+wxSize wxTextCtrl::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
+    // as in DoGetBestClientSize(): the metrics may not be known yet
+    if ( m_heightLine == -1 )
+    {
+        wxConstCast(this, wxTextCtrl)->RecalcFontMetrics();
+    }
+
+    // the text, and the caret after it, with what the renderer has around
+    // the text area and the border
+    wxRect rectText;
+    rectText.width = xlen + GetAverageWidth() / 2;
+    rectText.height = ylen > 0 ? ylen : GetLineHeight();
+
+    const wxRect rectTotal = GetRenderer()->GetTextTotalArea(this, rectText);
+    return AdjustSize(wxSize(rectTotal.width, rectTotal.height));
+}
+
 void wxTextCtrl::UpdateTextRect()
 {
     wxRect rectTotal(GetClientSize());
@@ -3840,7 +3858,8 @@ void wxTextCtrl::RefreshPixelRange(wxTextCoord line,
         // refresh till the end of visible line
         width = GetTotalWidth();
 
-        if ( WrapLines() )
+        // (the control may not have any width yet)
+        if ( WrapLines() && width > 0 )
         {
             // refresh till the end of text
             wxCoord widthAll = GetTextWidth(text);
@@ -4034,6 +4053,11 @@ void wxTextCtrl::DoDrawTextInRect(wxDC& dc, const wxRect& rectUpdate)
 
     // prepare for drawing
     wxCoord hLine = GetLineHeight();
+    if ( hLine <= 0 )
+    {
+        // a font without height: the loop below would never end
+        return;
+    }
 
     // these vars will be used for hit testing of the current row
     wxCoord y = rectUpdate.y;
@@ -4086,6 +4110,17 @@ void wxTextCtrl::DoDrawTextInRect(wxDC& dc, const wxRect& rectUpdate)
             // anything on this line - but continue with the remaining ones
             continue;
         }
+
+        // The hit test finds the character boundaries nearest to the edges
+        // of the update rectangle, so the characters the edges cut through
+        // may be left out although their background was erased: redraw one
+        // more character on each side, the DC clips what is not needed.
+        if ( colStart > colRowStart )
+            colStart--;
+
+        // (not with wrapped lines: the next character may be on the next row)
+        if ( !WrapLines() )
+            colEnd++;
 
         // for single line controls we may additionally cut off everything
         // which is to the right of the last visible position
