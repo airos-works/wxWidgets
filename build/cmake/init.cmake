@@ -382,8 +382,16 @@ if(wxUSE_GUI)
         set(wxUSE_THEME_GTK OFF)
         set(wxUSE_THEME_METAL OFF)
         set(wxUSE_THEME_MONO OFF)
-        # the base of the other themes, the fallback if the port has none
-        set(wxUSE_THEME_WIN32 ON)
+        set(wxUSE_THEME_HAIKU OFF)
+        if(WXHAIKU)
+            # wxHaiku has its own theme drawing through BControlLook; it does
+            # not use any code of the win32 theme
+            set(wxUSE_THEME_HAIKU ON)
+            set(wxUSE_THEME_WIN32 OFF)
+        else()
+            # the base of the other themes
+            set(wxUSE_THEME_WIN32 ON)
+        endif()
     endif()
 
     # WXHAIKU checks, match include/wx/haiku/chkconf.h

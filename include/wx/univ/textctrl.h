@@ -255,6 +255,7 @@ protected:
 
     // calc the size from the text extent
     virtual wxSize DoGetBestClientSize() const wxOVERRIDE;
+    virtual wxSize DoGetSizeFromTextSize(int xlen, int ylen = -1) const wxOVERRIDE;
 
     // implements Set/ChangeValue()
     virtual void DoSetValue(const wxString& value, int flags = 0) wxOVERRIDE;

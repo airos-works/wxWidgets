@@ -111,12 +111,27 @@ wxSize wxGauge::DoGetBestClientSize() const
 
 wxBorder wxGauge::GetDefaultBorder() const
 {
+#ifdef __WXHAIKU__
+    // the native gauge has its frame
+    return wxBORDER_NONE;
+#else
     return wxBORDER_STATIC;
+#endif
 }
 
 void wxGauge::DoDraw(wxControlRenderer *renderer)
 {
+#ifdef __WXHAIKU__
+    // drawn as the BStatusBar of the system by the native renderer
+    wxRenderer * const rend = renderer->GetRenderer();
+    rend->DrawBackground(renderer->GetDC(), wxNullColour,
+                         renderer->GetRect(), GetStateFlags(), this);
+    rend->DrawGauge(this, renderer->GetDC(), renderer->GetRect(),
+                    GetValue(), GetRange(),
+                    IsVertical() ? wxCONTROL_SPECIAL : 0);
+#else
     renderer->DrawProgressBar(this);
+#endif
 }
 
 #endif // wxUSE_GAUGE

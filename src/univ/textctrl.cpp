@@ -2408,6 +2408,24 @@ wxSize wxTextCtrl::DoGetBestClientSize() const
     return wxSize(rectTotal.width, rectTotal.height);
 }
 
+wxSize wxTextCtrl::DoGetSizeFromTextSize(int xlen, int ylen) const
+{
+    // as in DoGetBestClientSize(): the metrics may not be known yet
+    if ( m_heightLine == -1 )
+    {
+        wxConstCast(this, wxTextCtrl)->RecalcFontMetrics();
+    }
+
+    // the text, and the caret after it, with what the renderer has around
+    // the text area and the border
+    wxRect rectText;
+    rectText.width = xlen + GetAverageWidth() / 2;
+    rectText.height = ylen > 0 ? ylen : GetLineHeight();
+
+    const wxRect rectTotal = GetRenderer()->GetTextTotalArea(this, rectText);
+    return AdjustSize(wxSize(rectTotal.width, rectTotal.height));
+}
+
 void wxTextCtrl::UpdateTextRect()
 {
     wxRect rectTotal(GetClientSize());

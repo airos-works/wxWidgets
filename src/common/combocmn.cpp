@@ -1688,6 +1688,18 @@ void wxComboCtrlBase::PrepareBackground( wxDC& dc, const wxRect& rect, int flags
 #endif
     }
 
+#ifdef __WXHAIKU__
+    // the control is a menu field drawn by the native renderer: nothing is
+    // painted over its surface, the text has the colour of a control
+    if ( !(flags & wxCONTROL_ISSUBMENU) && (m_iFlags & wxCC_FULL_BUTTON)
+            && !m_hasTcBgCol )
+    {
+        doDrawSelRect = false;
+        if ( isEnabled && !m_hasFgCol )
+            fgCol = wxSystemSettings::GetColour(wxSYS_COLOUR_BTNTEXT);
+    }
+#endif // __WXHAIKU__
+
     dc.SetTextForeground( fgCol );
     dc.SetBrush( bgCol );
     if ( doDrawSelRect )
