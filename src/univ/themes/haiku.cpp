@@ -48,7 +48,6 @@
 #include "wx/tglbtn.h"
 #include "wx/popupwin.h"
 #include "wx/region.h"
-#include "wx/dcscreen.h"
 
 #include "wx/univ/scrtimer.h"
 #include "wx/univ/stdrend.h"
@@ -57,6 +56,8 @@
 #include "wx/univ/colschem.h"
 
 #include "wx/haiku/look.h"
+
+#include <IconUtils.h>
 
 #include <math.h>
 
@@ -558,8 +559,17 @@ public:
 #endif // wxUSE_CHECKBOX
 
 // ----------------------------------------------------------------------------
-// wxHaikuArtProvider: nothing of its own, the port has the system's icons
+// wxHaikuArtProvider: the icons of the alerts of the system for the message
+// boxes (the standard art provider leaves them to the theme)
 // ----------------------------------------------------------------------------
+
+class wxHaikuArtProvider : public wxArtProvider
+{
+protected:
+    virtual wxBitmap CreateBitmap(const wxArtID& id,
+                                  const wxArtClient& client,
+                                  const wxSize& size) wxOVERRIDE;
+};
 
 // ----------------------------------------------------------------------------
 // wxHaikuTheme
@@ -581,6 +591,8 @@ public:
 
 private:
     wxHaikuRenderer *m_renderer;
+
+    wxHaikuArtProvider *m_artProvider;
 
     // the names of the already created handlers and the handlers themselves
     // (these arrays are synchronized)
@@ -606,12 +618,14 @@ wxHaikuTheme::wxHaikuTheme()
 {
     m_scheme = NULL;
     m_renderer = NULL;
+    m_artProvider = NULL;
 }
 
 wxHaikuTheme::~wxHaikuTheme()
 {
     delete m_renderer;
     delete m_scheme;
+    delete m_artProvider;
 }
 
 wxRenderer *wxHaikuTheme::GetRenderer()
@@ -627,7 +641,10 @@ wxRenderer *wxHaikuTheme::GetRenderer()
 
 wxArtProvider *wxHaikuTheme::GetArtProvider()
 {
-    return NULL;
+    if ( !m_artProvider )
+        m_artProvider = new wxHaikuArtProvider;
+
+    return m_artProvider;
 }
 
 wxColourScheme *wxHaikuTheme::GetColourScheme()
@@ -687,6 +704,39 @@ wxHaikuTheme::GetInputHandler(const wxString& control,
     }
 
     return handler;
+}
+
+// ============================================================================
+// wxHaikuArtProvider
+// ============================================================================
+
+wxBitmap wxHaikuArtProvider::CreateBitmap(const wxArtID& id,
+                                          const wxArtClient& client,
+                                          const wxSize& size)
+{
+    // the icons of BAlert, vector icons rendered at the size asked for
+    const char *name;
+    if ( id == wxART_INFORMATION )
+        name = "dialog-information";
+    else if ( id == wxART_WARNING )
+        name = "dialog-warning";
+    else if ( id == wxART_ERROR )
+        name = "dialog-error";
+    else if ( id == wxART_QUESTION )
+        name = "dialog-idea";
+    else
+        return wxNullBitmap;
+
+    int side = wxMin(size.x, size.y);
+    if ( side <= 0 )
+        side = Scaled(client == wxART_MESSAGE_BOX ? 32 : 16);
+
+    wxBitmap bitmap(side, side, 32);
+    BBitmap * const native = bitmap.IsOk() ? bitmap.GetHaikuBitmap() : NULL;
+    if ( !native || BIconUtils::GetSystemIcon(name, native) != B_OK )
+        return wxNullBitmap;
+
+    return bitmap;
 }
 
 // ============================================================================
@@ -782,7 +832,9 @@ wxColour wxHaikuColourScheme::Get(wxHaikuColourScheme::StdColour col) const
             break;
 
         case SHADOW_DARK:
-            c = tint_color(panel, B_DARKEN_3_TINT);
+            // also wxSYS_COLOUR_BTNSHADOW, the selection of the generic
+            // controls which are not the focus
+            c = tint_color(panel, B_DARKEN_2_TINT);
             break;
 
         case SHADOW_HIGHLIGHT:
@@ -1043,6 +1095,14 @@ void wxHaikuRenderer::DrawBorder(wxDC& dc,
     // with (DrawButtonSurface()).
     if ( AsButton(win) )
         return;
+
+    // Frames and dialogs have the decorations of the system: no second
+    // border inside them (popup windows have none and get theirs here).
+    if ( win && win->IsTopLevel() && rectTotal.GetSize() == win->GetSize()
+            && wxDynamicCast(win, wxTopLevelWindow) )
+    {
+        return;
+    }
 
     const wxColour base = win ? Scheme()->GetParentBackground(win) : Panel();
 
@@ -1400,8 +1460,10 @@ void wxHaikuRenderer::DrawArrow(wxDC& dc,
     if ( flags & wxCONTROL_DISABLED )
         colour = wxHaikuLook::DisabledText(colour, base);
 
-    // the arrow is stroked in the middle third of a square
-    const int side = wxMax(rect.width, rect.height);
+    // The arrow is stroked in the middle third of a square, with a pen of
+    // a sixth of its side: 13 pixels give the two pixel strokes of the
+    // arrows of the system's small buttons.
+    const int side = wxMin(wxMax(rect.width, rect.height), Scaled(13));
     wxRect rectArrow(0, 0, side, side);
     wxHaikuLook::DrawArrow(dc, rectArrow.CentreIn(rect), dir, colour);
 }
@@ -2416,11 +2478,12 @@ void wxHaikuRenderer::DrawMenuSeparator(wxDC& dc,
     dc.DrawLine(1, yLine + 1, x2, yLine + 1);
 }
 
-wxMenuGeometryInfo *wxHaikuRenderer::GetMenuGeometry(wxWindow *WXUNUSED(win),
+wxMenuGeometryInfo *wxHaikuRenderer::GetMenuGeometry(wxWindow *win,
                                                      const wxMenu& menu) const
 {
-    // the items are drawn in the standard font of the system
-    wxScreenDC dc;
+    // the items are drawn in the standard font of the system (the DC is
+    // only used to measure them)
+    wxClientDC dc(win);
     dc.SetFont(wxSystemSettings::GetFont(wxSYS_DEFAULT_GUI_FONT));
 
     const MenuPadding pad;
@@ -2605,7 +2668,8 @@ void wxHaikuRenderer::AdjustSize(wxSize *size, const wxWindow *window)
 
         // BButton::_ValidatePreferredSize(): the label with 3.3 label
         // spacings around it, 12.5 of them at least; 1.8 times as high as
-        // its text
+        // its text. The size passed in is added to the size of the label
+        // (wxWindow::DoGetBorderSize()), it is not that size.
         const int heightLine = window->GetCharHeight();
         const int margins = (int)(top + bottom) + spacing;
 
@@ -2616,9 +2680,15 @@ void wxHaikuRenderer::AdjustSize(wxSize *size, const wxWindow *window)
         }
         else
         {
-            size->x += (int)(left + right) + (int)ceil(spacing * 3.3);
-            size->x = wxMax(size->x, (int)ceil(spacing * 12.5));
+            int extra = (int)(left + right) + (int)ceil(spacing * 3.3);
 
+            const int widthLabel
+                = window->GetTextExtent(button->GetLabelText()).x;
+            const int widthMin = (int)ceil(spacing * 12.5);
+            if ( widthLabel + extra < widthMin )
+                extra = widthMin - widthLabel;
+
+            size->x += extra;
             size->y += wxMax(margins, (int)ceil(heightLine * 0.8));
         }
 
