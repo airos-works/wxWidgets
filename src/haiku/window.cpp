@@ -854,7 +854,7 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
     {
         if ( sizeFlags & wxSIZE_AUTO_WIDTH )
         {
-            best = DoGetBestSize();
+            best = GetBestSize();
             width = best.x;
         }
         else
@@ -868,7 +868,7 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
         if ( sizeFlags & wxSIZE_AUTO_HEIGHT )
         {
             if ( best.y == wxDefaultCoord )
-                best = DoGetBestSize();
+                best = GetBestSize();
             height = best.y;
         }
         else
