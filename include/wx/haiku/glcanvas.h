@@ -14,11 +14,12 @@ class BBitmap;
 struct wxHaikuGLContextData;
 
 // The GL kit ties an OpenGL context and its frame buffer to a BGLView. A
-// wxGLContext must be usable with any canvas, so it owns a BGLView of its own
-// which is never shown: the context renders into the buffers of this view,
-// which have the size of the canvas the context is current for, and
-// wxGLCanvas::SwapBuffers() copies the frame to the canvas. See the top of
-// src/haiku/glcanvas.cpp.
+// wxGLContext must be usable with any canvas, so it owns a BGLView of its
+// own, which has the size of the canvas the context is current for and is
+// put into this canvas: the kit then shows the frames itself. While a context
+// renders for several canvases which are on screen at once its view is in no
+// window and wxGLCanvas::SwapBuffers() copies the frame to the canvas
+// instead. See the top of src/haiku/glcanvas.cpp.
 //
 // What follows from this:
 //  - The back buffer belongs to the context, not to the canvas: swap the
@@ -110,9 +111,14 @@ public:
     // the BGL_XXX options the display attributes were translated to
     unsigned long GetHaikuGLOptions() const { return m_glOptions; }
 
+    virtual bool SetCursor(const wxCursor& cursor) wxOVERRIDE;
+
     // implementation-only from now on
     virtual bool HaikuHasNativeContent() const wxOVERRIDE { return true; }
     virtual void HaikuHandleEvent(const wxHaikuEvent& event) wxOVERRIDE;
+
+    // the view of a context became a child of the view of this canvas
+    void HaikuGLViewAttached(BView *view) const;
 
     // the context which renders for this canvas at the moment
     wxHaikuGLContextData *HaikuGetContextData() const { return m_context; }
@@ -135,7 +141,7 @@ private:
 
     mutable wxHaikuGLContextData *m_context;
 
-    // the last frame shown
+    // the last frame shown if the canvas shows the frames itself
     mutable BBitmap *m_frame;
 
     wxDECLARE_CLASS(wxGLCanvas);
