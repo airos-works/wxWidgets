@@ -36,6 +36,10 @@
     || defined(__WXGTK__) || defined(__WXMOTIF__) || defined(__WXX11__) \
     || defined(__WXOSX_MAC__) || defined(__WXQT__)
     #define wxHAS_TASK_BAR_ICON
+#elif defined(__WXHAIKU__)
+    /*  the class exists so that code using it builds, but it shows nothing
+        (see wx/haiku/taskbar.h): no wxHAS_TASK_BAR_ICON */
+    #undef wxHAS_TASK_BAR_ICON
 #else
     #undef wxUSE_TASKBARICON
     #define wxUSE_TASKBARICON 0
