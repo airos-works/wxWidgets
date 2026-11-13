@@ -737,17 +737,14 @@ bool wxNonOwnedWindow::Show(bool show)
 
 void wxNonOwnedWindow::Raise()
 {
-    if ( !m_window )
+    // popups have the feel of menus: they are above everything already and
+    // never become the active window
+    if ( !m_window || HaikuAvoidsFocus() )
         return;
 
     wxHaikuWindowLock lock(m_window);
     if ( lock.IsLocked() )
-    {
-        if ( HaikuAvoidsFocus() )
-            m_window->SendBehind(NULL);
-        else
-            m_window->Activate(true);
-    }
+        m_window->Activate(true);
 }
 
 void wxNonOwnedWindow::Lower()
@@ -755,20 +752,10 @@ void wxNonOwnedWindow::Lower()
     if ( !m_window )
         return;
 
+    // behind all other windows
     wxHaikuWindowLock lock(m_window);
-    if ( !lock.IsLocked() )
-        return;
-
-    // behind all the other windows of the application
-    BWindow *last = NULL;
-    for ( int32 i = 0; BWindow *window = be_app->WindowAt(i); i++ )
-    {
-        if ( window != m_window && !window->IsHidden() && !window->IsOffscreenWindow() )
-            last = window;
-    }
-
-    if ( last )
-        m_window->SendBehind(last);
+    if ( lock.IsLocked() )
+        m_window->SendBehind(NULL);
 }
 
 static void wxHaikuUpdateModalWindows()

@@ -3840,7 +3840,8 @@ void wxTextCtrl::RefreshPixelRange(wxTextCoord line,
         // refresh till the end of visible line
         width = GetTotalWidth();
 
-        if ( WrapLines() )
+        // (the control may not have any width yet)
+        if ( WrapLines() && width > 0 )
         {
             // refresh till the end of text
             wxCoord widthAll = GetTextWidth(text);

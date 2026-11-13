@@ -7,7 +7,8 @@
 # Environment:
 #   WX_BUILD_ROOT   build trees         (default /data1/scratch/bambustudio/wx-build)
 #   WX_INSTALL_ROOT install prefixes    (default /data1/scratch/bambustudio/wx-install)
-#   WX_SAMPLES=1    also build the samples (into <build>/samples)
+#   WX_SAMPLES=1    configure the tree with the samples (they are built by
+#                   naming them as targets or by `ninja -C <build>`)
 #   WX_JOBS         parallel jobs       (default 16)
 #   AIROS_SDK       SDK root            (default /data1/airos/sdk)
 #   AIROS_DEPS      extra dev packages  (default /data1/airos/deps)
@@ -23,8 +24,9 @@ PREFIX=${WX_INSTALL_ROOT:-/data1/scratch/bambustudio/wx-install}/$ARCH
 SDK=${AIROS_SDK:-/data1/airos/sdk}/$ARCH
 DEPS=${AIROS_DEPS:-/data1/airos/deps}/$ARCH/boot/system
 JOBS=${WX_JOBS:-16}
-SAMPLES=OFF
-[[ -z ${WX_SAMPLES:-} ]] || SAMPLES=ALL
+# unset: as the tree was configured before (off in a new tree)
+SAMPLES=()
+[[ -z ${WX_SAMPLES:-} ]] || SAMPLES=(-DwxBUILD_SAMPLES=ALL)
 [[ -f $SDK/env.sh ]] || { echo "no air/OS SDK at $SDK" >&2; exit 1; }
 
 if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.ninja ]]; then
@@ -38,7 +40,7 @@ if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.nin
 		-DwxBUILD_SHARED=OFF \
 		-DwxBUILD_PRECOMP=OFF \
 		-DwxBUILD_PIC=OFF \
-		-DwxBUILD_SAMPLES="$SAMPLES" \
+		"${SAMPLES[@]}" \
 		-DwxBUILD_DEBUG_LEVEL=0 \
 		-DwxBUILD_OPTIMISE=ON \
 		-DwxUSE_UNICODE=ON \
