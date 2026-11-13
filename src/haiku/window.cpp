@@ -220,8 +220,11 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                   node;
                   node = node->GetPrevious() )
             {
+                // NB: wxDynamicCast() cannot be used, wxNonOwnedWindow is
+                //     not in the wx RTTI chain of wxTopLevelWindow (which
+                //     wxIMPLEMENT_ABSTRACT_CLASS derives from wxWindow)
                 wxNonOwnedWindow * const
-                    tlw = wxDynamicCast(node->GetData(), wxNonOwnedWindow);
+                    tlw = dynamic_cast<wxNonOwnedWindow *>(node->GetData());
                 if ( tlw && tlw->HaikuIsModal() && tlw->IsShown() )
                 {
                     tlw->Raise();

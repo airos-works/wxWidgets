@@ -788,8 +788,11 @@ static void wxHaikuUpdateModalWindows()
           node;
           node = node->GetNext() )
     {
+        // NB: wxDynamicCast() cannot be used, wxNonOwnedWindow is not in the
+        //     wx RTTI chain of wxTopLevelWindow (which
+        //     wxIMPLEMENT_ABSTRACT_CLASS derives from wxWindow)
         wxNonOwnedWindow * const
-            win = wxDynamicCast(node->GetData(), wxNonOwnedWindow);
+            win = dynamic_cast<wxNonOwnedWindow *>(node->GetData());
         if ( !win )
             continue;
 
