@@ -47,6 +47,20 @@ public:
 
     virtual void SetLogicalFunction(wxRasterOperationMode function) wxOVERRIDE;
 
+    // An invalid colour leaves the current one, as in the other ports:
+    // generic code relies on it (wxRendererGeneric::DrawItemText() sets
+    // wxNullColour for the items which keep the colour of the caller).
+    virtual void SetTextForeground(const wxColour& colour) wxOVERRIDE
+    {
+        if ( colour.IsOk() )
+            m_textForegroundColour = colour;
+    }
+    virtual void SetTextBackground(const wxColour& colour) wxOVERRIDE
+    {
+        if ( colour.IsOk() )
+            m_textBackgroundColour = colour;
+    }
+
     virtual void DestroyClippingRegion() wxOVERRIDE;
 
     virtual wxCoord GetCharHeight() const wxOVERRIDE;
