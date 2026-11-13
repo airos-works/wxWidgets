@@ -32,11 +32,27 @@
 #endif
 
 #include "wx/dcbuffer.h"
+#include "wx/renderer.h"
 
 // ----------------------------------------------------------------------------
 // Some constant adjustments to make the generic more bearable
 
-#if defined(__WXUNIVERSAL__)
+#if defined(__WXHAIKU__)
+
+#include "wx/settings.h"
+
+// position adjustment for wxTextCtrl, to achieve zero left margin
+// meaningless if LEFT_MARGIN_CAN_BE_SET set to 1 in combocmn.cpp
+#define TEXTCTRLXADJUST                 0
+
+// as wide as a scroll bar: it follows the size of the system font
+#define DEFAULT_DROPBUTTON_WIDTH        \
+    wxSystemSettings::GetMetric(wxSYS_VSCROLL_X)
+
+// the frame the native renderer draws around the control in OnPaintEvent()
+#define HAIKU_FRAME_WIDTH               2
+
+#elif defined(__WXUNIVERSAL__)
 
 // position adjustment for wxTextCtrl, to achieve zero left margin
 // meaningless if LEFT_MARGIN_CAN_BE_SET set to 1 in combocmn.cpp
@@ -117,7 +133,20 @@ bool wxGenericComboCtrl::Create(wxWindow *parent,
     long border = style & wxBORDER_MASK;
     int tcBorder = wxNO_BORDER;
 
-#if defined(__WXUNIVERSAL__)
+#if defined(__WXHAIKU__)
+    // The native renderer draws the control: a read-only one is the menu
+    // field of the system (a button which opens a menu), an editable one a
+    // text control with the drop button inside its frame.
+    if ( !border )
+    {
+        border = wxBORDER_NONE;
+        m_widthCustomBorder = HAIKU_FRAME_WIDTH;
+
+        // a menu field shows the focus with its frame, not as a selection
+        if ( style & wxCB_READONLY )
+            Customize( wxCC_FULL_BUTTON | wxCC_BUTTON_STAYS_DOWN );
+    }
+#elif defined(__WXUNIVERSAL__)
     if ( !border )
         border = wxBORDER_SIMPLE;
 #elif defined(__WXMSW__)
@@ -247,6 +276,33 @@ void wxGenericComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
     wxRect tcRect = m_tcArea;
     wxRect fullRect(0, 0, sz.x, sz.y);
 
+#ifdef __WXHAIKU__
+    const bool isMenuField = m_widthCustomBorder && !m_text;
+    if ( m_widthCustomBorder )
+    {
+        int flags = IsEnabled() ? 0 : wxCONTROL_DISABLED;
+
+        const wxWindow * const focus = FindFocus();
+        if ( focus && (focus == this || focus == m_text) )
+            flags |= wxCONTROL_FOCUSED;
+
+        if ( isMenuField )
+        {
+            if ( m_btnState & wxCONTROL_CURRENT )
+                flags |= wxCONTROL_CURRENT;
+
+            wxRendererNative::Get().DrawChoice(this, dc, fullRect, flags);
+        }
+        else
+        {
+            wxRendererNative::Get().DrawTextCtrl(this, dc, fullRect, flags);
+        }
+    }
+    else
+#else
+    const bool isMenuField = false;
+#endif // __WXHAIKU__
+
     // artificial simple border
     if ( m_widthCustomBorder )
     {
@@ -302,7 +358,7 @@ void wxGenericComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
         dc.DrawRectangle(fullRect);
     }
 
-    if ( !m_btn )
+    if ( !m_btn && !isMenuField )
     {
         // Standard button rendering
         DrawButton(dc, butRect);
@@ -314,10 +370,13 @@ void wxGenericComboCtrl::OnPaintEvent( wxPaintEvent& WXUNUSED(event) )
         wxASSERT( m_widthCustomPaint >= 0 );
 
         // Clear the text-control area background
-        wxColour tcCol = GetBackgroundColour();
-        dc.SetBrush(tcCol);
-        dc.SetPen(tcCol);
-        dc.DrawRectangle(tcRect);
+        if ( !isMenuField )
+        {
+            wxColour tcCol = GetBackgroundColour();
+            dc.SetBrush(tcCol);
+            dc.SetPen(tcCol);
+            dc.DrawRectangle(tcRect);
+        }
 
         // this is intentionally here to allow drawed rectangle's
         // right edge to be hidden
