@@ -77,7 +77,25 @@ public:
     }
 
     virtual bool CanBeOutsideClientArea() const { return true; }
+
+    // The window's scroll bars are its children: they are deleted with the
+    // others by DestroyChildren() (BambuStudio's HMSPanel empties its
+    // wxScrolledWindow that way), and the window must not keep pointing at
+    // them.
+    virtual ~wxWindowScrollBar();
 };
+
+wxWindowScrollBar::~wxWindowScrollBar()
+{
+    wxWindow * const parent = GetParent();
+    if ( parent )
+    {
+        if ( parent->m_scrollbarVert == this )
+            parent->m_scrollbarVert = NULL;
+        if ( parent->m_scrollbarHorz == this )
+            parent->m_scrollbarHorz = NULL;
+    }
+}
 #endif // wxUSE_SCROLLBAR
 
 

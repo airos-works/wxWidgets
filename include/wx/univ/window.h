@@ -274,6 +274,9 @@ private:
     // the window scrollbars
     wxScrollBar *m_scrollbarHorz,
                 *m_scrollbarVert;
+
+    // which resets them when it is destroyed by another than us
+    friend class wxWindowScrollBar;
 #endif // wxUSE_SCROLLBAR
 
 #if wxUSE_MENUS
