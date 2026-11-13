@@ -54,7 +54,8 @@ public:
     virtual wxString GetPluginsDir() const wxOVERRIDE;
 
     virtual wxString GetLocalizedResourcesDir(const wxString& lang,
-                                              ResourceCat category) const wxOVERRIDE;
+                                              ResourceCat category
+                                                = ResourceCat_None) const wxOVERRIDE;
 
     // ~/Documents if it exists, the home directory otherwise
     virtual wxString GetDocumentsDir() const wxOVERRIDE;

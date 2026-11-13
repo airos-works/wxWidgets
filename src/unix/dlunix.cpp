@@ -98,6 +98,10 @@ void *wxDynamicLibrary::RawGetSymbol(wxDllType handle, const wxString& name)
     return symbol;
 }
 
+#ifdef __HAIKU__
+    #include <image.h>          // for get_next_image_info()
+#endif
+
 // ----------------------------------------------------------------------------
 // error handling
 // ----------------------------------------------------------------------------
@@ -232,7 +236,20 @@ wxDynamicLibraryDetailsArray wxDynamicLibrary::ListLoaded()
             }
         }
     }
-#endif // __LINUX__
+#elif defined(__HAIKU__)
+    // the images of this team: the program, its libraries and add-ons
+    image_info info;
+    int32 cookie = 0;
+    while ( get_next_image_info(B_CURRENT_TEAM, &cookie, &info) == B_OK )
+    {
+        char *end = (char *)info.text + info.text_size;
+        if ( (char *)info.data + info.data_size > end )
+            end = (char *)info.data + info.data_size;
+
+        dlls.Add(wxDynamicLibraryDetailsCreator::New(info.text, end,
+                                                     wxString::FromUTF8(info.name)));
+    }
+#endif // __LINUX__/__HAIKU__
 
     return dlls;
 }
