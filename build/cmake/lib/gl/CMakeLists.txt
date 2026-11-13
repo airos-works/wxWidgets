@@ -21,10 +21,17 @@ elseif(WXOSX_IPHONE)
     wx_append_sources(GL_FILES OPENGL_OSX_IPHONE)
 elseif(WXQT)
     wx_append_sources(GL_FILES OPENGL_QT)
+elseif(WXHAIKU)
+    wx_append_sources(GL_FILES OPENGL_HAIKU)
 endif()
 
 wx_add_library(wxgl ${GL_FILES})
 wx_lib_include_directories(wxgl PUBLIC ${OPENGL_INCLUDE_DIR})
 wx_lib_link_libraries(wxgl PUBLIC ${OPENGL_LIBRARIES})
+if(WXHAIKU AND wxHAIKU_GL_RPATH_LINK)
+    # libGL outside of the sysroot (libglvnd among the extra dev packages):
+    # the linker must find the libraries libGL itself needs
+    wx_lib_link_libraries(wxgl PUBLIC "-Wl,-rpath-link,${wxHAIKU_GL_RPATH_LINK}")
+endif()
 
 wx_finalize_lib(wxgl)
