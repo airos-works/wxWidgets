@@ -311,9 +311,12 @@ bool wxApp::ProcessIdle()
 {
     // The paint phase: everything the event handlers invalidated is painted
     // once the queue is empty, before the idle events.
+    wxHAIKU_TRACE("idle: paint");
     wxHaikuPaintPendingWindows();
 
+    wxHAIKU_TRACE("idle: events");
     const bool needMore = wxAppBase::ProcessIdle();
+    wxHAIKU_TRACE("idle: done, more=%d", (int)needMore);
 
     // idle handlers usually update the UI: show it now
     wxHaikuPaintPendingWindows();

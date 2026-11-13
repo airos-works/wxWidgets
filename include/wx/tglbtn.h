@@ -73,6 +73,7 @@ protected:
 
 #if defined(__WXUNIVERSAL__)
     #include "wx/univ/tglbtn.h"
+    #define wxHAS_BITMAPTOGGLEBUTTON
 #elif defined(__WXMSW__)
     #include "wx/msw/tglbtn.h"
     #define wxHAS_BITMAPTOGGLEBUTTON
