@@ -136,6 +136,7 @@ protected:
     bool m_isActive;
     bool m_windowShown;
     bool m_sizeEventSent;
+    bool m_shownOnce;
 
     wxDECLARE_ABSTRACT_CLASS(wxNonOwnedWindow);
 };

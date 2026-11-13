@@ -288,6 +288,7 @@ void wxNonOwnedWindow::Init()
     m_isActive = false;
     m_windowShown = false;
     m_sizeEventSent = false;
+    m_shownOnce = false;
 
     m_isShown = false;
 }
@@ -697,9 +698,12 @@ bool wxNonOwnedWindow::Show(bool show)
     if ( !m_window )
         return true;
 
-    if ( show && !m_sizeEventSent )
+    if ( show && !m_shownOnce )
     {
-        // the first size event: lays out the window before it appears
+        // A size event before the window appears for the first time: the
+        // children created since the window itself got its size are laid
+        // out by it.
+        m_shownOnce = true;
         m_sizeEventSent = true;
 
         wxSizeEvent event(GetSize(), GetId());

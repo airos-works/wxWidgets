@@ -48,6 +48,7 @@ if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.nin
 		-DwxUSE_LIBPNG=sys -DwxUSE_LIBJPEG=sys -DwxUSE_LIBTIFF=sys \
 		-DwxUSE_STC=OFF \
 		-DwxUSE_PRIVATE_FONTS=ON \
+		-DwxUSE_GRAPHICS_CONTEXT=ON \
 		${WX_CMAKE_ARGS:-}
 fi
 

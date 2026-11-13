@@ -293,11 +293,16 @@ public:
     wxHaikuDrawView(BRect frame, const char *name, uint32 resizingMode,
                     uint32 flags)
         : BView(frame, name, resizingMode, flags),
-          m_stateOwner(NULL)
+          m_stateOwner(NULL),
+          m_transformed(false)
     {
     }
 
     const void *m_stateOwner;
+
+    // a graphics context left an affine transformation on the view: who
+    // takes the view over resets it
+    bool m_transformed;
 };
 
 // Helpers for the hooks of views which stand for a wxWindow: they only build

@@ -18,6 +18,7 @@
 #include "wx/haiku/dc.h"
 #include "wx/haiku/private.h"
 
+#include <AffineTransform.h>
 #include <GradientLinear.h>
 #include <GradientRadial.h>
 #include <Polygon.h>
@@ -203,7 +204,16 @@ bool wxHaikuDCImpl::HaikuBeginRawDraw(bool applyClip)
     if ( !view || view->m_stateOwner != this )
     {
         if ( view )
+        {
             view->m_stateOwner = this;
+
+            if ( view->m_transformed )
+            {
+                m_view->SetTransform(BAffineTransform());
+                view->m_transformed = false;
+            }
+        }
+
         m_clipDirty = true;
     }
 
@@ -1041,7 +1051,31 @@ void wxHaikuDCImpl::DoGradientFillConcentric(const wxRect& rect,
 
 void wxHaikuDCImpl::DoDrawText(const wxString& text, wxCoord x, wxCoord y)
 {
-    DoDrawRotatedText(text, x, y, 0);
+    if ( text.find(wxS('\n')) == wxString::npos )
+    {
+        DoDrawRotatedText(text, x, y, 0);
+        return;
+    }
+
+    // one line below the other, as the ports whose text engine handles the
+    // line breaks do it
+    const int lineHeight = GetCharHeight();
+    size_t start = 0;
+    for ( ;; )
+    {
+        const size_t end = text.find(wxS('\n'), start);
+        const wxString line = text.substr(start, end == wxString::npos
+                                                    ? wxString::npos
+                                                    : end - start);
+        if ( !line.empty() )
+            DoDrawRotatedText(line, x, y, 0);
+
+        if ( end == wxString::npos )
+            break;
+
+        start = end + 1;
+        y += lineHeight;
+    }
 }
 
 void wxHaikuDCImpl::DoDrawRotatedText(const wxString& text,
