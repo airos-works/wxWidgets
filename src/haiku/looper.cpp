@@ -193,12 +193,9 @@ void wxHaikuView::MouseDown(BPoint where)
     // with the button down
     SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
 
-    // A window which accepts the first click (ours do: the click which
-    // activates a window also works in it) is not activated by app_server
-    // when its contents are clicked: that is left to the views.
-    BWindow * const window = Window();
-    if ( window && !window->IsActive() && !(window->Flags() & B_AVOID_FOCUS) )
-        window->Activate(true);
+    // The window is not activated here: app_server did it before it sent
+    // the click (our windows do not have B_WILL_ACCEPT_FIRST_CLICK, as native
+    // ones), so the activation reaches wx before the click does.
 
     wxHaikuPostMouseEvent(this, m_handle, wxHAIKU_EVT_MOUSE_DOWN, where);
 }

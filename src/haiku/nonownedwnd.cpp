@@ -508,7 +508,8 @@ void wxNonOwnedWindow::HaikuGetWindowType(int *look, int *feel,
 {
     *look = B_NO_BORDER_WINDOW_LOOK;
     *feel = B_NORMAL_WINDOW_FEEL;
-    *flags = B_ASYNCHRONOUS_CONTROLS | B_WILL_ACCEPT_FIRST_CLICK;
+    // app_server activates the window on a click, see toplevel.cpp
+    *flags = B_ASYNCHRONOUS_CONTROLS;
 }
 
 void wxNonOwnedWindow::HaikuUpdateWindowType()

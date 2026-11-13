@@ -77,7 +77,10 @@ void wxTopLevelWindowHaiku::HaikuGetWindowType(int *look, int *feel,
 {
     const long style = GetWindowStyleFlag();
 
-    *flags = B_ASYNCHRONOUS_CONTROLS | B_WILL_ACCEPT_FIRST_CLICK;
+    // Not B_WILL_ACCEPT_FIRST_CLICK, as native windows: app_server activates
+    // the window when its contents are clicked, before it delivers the click
+    // (which it does unless the user turned "accept first click" off).
+    *flags = B_ASYNCHRONOUS_CONTROLS;
 
     if ( m_fsIsShowing )
     {
