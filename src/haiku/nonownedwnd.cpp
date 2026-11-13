@@ -682,6 +682,8 @@ void wxNonOwnedWindow::HaikuFrameChanged(const wxRect& content)
 
         if ( HaikuFindByHandle(handle) != this )
             return;
+
+        HaikuAfterSizeEvent();
     }
 
     if ( moved )
@@ -743,6 +745,8 @@ bool wxNonOwnedWindow::Show(bool show)
         wxSizeEvent event(GetSize(), GetId());
         event.SetEventObject(this);
         HandleWindowEvent(event);
+
+        HaikuAfterSizeEvent();
     }
 
     if ( !show )

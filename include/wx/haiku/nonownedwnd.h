@@ -69,6 +69,10 @@ public:
 
     // true while the window is shown application modally
     bool HaikuIsModal() const { return m_isModal; }
+
+    // called after the size event of the window was processed, whether a
+    // handler of the application let it through to the base classes or not
+    virtual void HaikuAfterSizeEvent() { }
     void HaikuSetModal(bool modal);
 
 protected:

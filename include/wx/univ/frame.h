@@ -61,6 +61,13 @@ protected:
     void OnSize(wxSizeEvent& event);
     void OnSysColourChanged(wxSysColourChangedEvent& event);
 
+#ifdef __WXHAIKU__
+    // The bars are positioned by OnSize(), which a size event handler of the
+    // application not calling Skip() keeps from running: the native ports
+    // lay out their bars independently of it, so do it here too.
+    virtual void HaikuAfterSizeEvent() wxOVERRIDE;
+#endif
+
     virtual void DoGetClientSize(int *width, int *height) const wxOVERRIDE;
     virtual void DoSetClientSize(int width, int height) wxOVERRIDE;
 

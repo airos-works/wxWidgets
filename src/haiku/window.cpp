@@ -933,6 +933,10 @@ void wxWindowHaiku::DoMoveWindow(int x, int y, int width, int height)
 
     m_rect = wxRect(x, y, width, height);
 
+    wxHAIKU_TRACE("geometry %u (%s) %d,%d %dx%d", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  x, y, width, height);
+
     if ( !m_view )
         return;
 
