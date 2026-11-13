@@ -67,14 +67,23 @@ bool wxStaticBitmap::Create(wxWindow *parent,
 void wxStaticBitmap::SetBitmap(const wxBitmap& bitmap)
 {
     m_bitmap = bitmap;
+
+    // as the native ports do: the control takes the size of its new bitmap
+    // (one created without a bitmap and given one later showed only the
+    // part of it which fitted in its old size) and shows it
+    InvalidateBestSize();
+    SetSize(GetBestSize());
+    Refresh();
 }
 
 void wxStaticBitmap::SetIcon(const wxIcon& icon)
 {
 #ifdef __WXMSW__
-    m_bitmap.CopyFromIcon(icon);
+    wxBitmap bitmap;
+    bitmap.CopyFromIcon(icon);
+    SetBitmap(bitmap);
 #else
-    m_bitmap = (const wxBitmap&)icon;
+    SetBitmap((const wxBitmap&)icon);
 #endif
 }
 

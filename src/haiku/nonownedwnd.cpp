@@ -621,6 +621,17 @@ void wxNonOwnedWindow::HaikuSetModal(bool modal)
 
     m_isModal = modal;
     HaikuUpdateWindowType();
+
+    // A dialog is shown before it becomes modal (wxWindowDisabler comes
+    // after Show() in ShowModal()): while another modal dialog runs it
+    // appeared behind that one, which had the modal feel then. It is the
+    // window the user deals with now: in front of the others.
+    if ( modal && m_window && IsShown() )
+    {
+        wxHaikuWindowLock lock(m_window);
+        if ( lock.IsLocked() )
+            m_window->Activate(true);
+    }
 }
 
 // ----------------------------------------------------------------------------
