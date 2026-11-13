@@ -20,6 +20,8 @@
 #include "wx/popupwin.h"
 #include "wx/evtloop.h"
 
+#include "wx/univ/renderer.h"
+
 #include "wx/haiku/private.h"
 
 #include <InterfaceDefs.h>
@@ -504,18 +506,33 @@ void wxNonOwnedWindow::DoGetSize(int *width, int *height) const
         *height = m_content.height + m_decoTop + m_decoBottom;
 }
 
+// The border wxUniversal draws inside the window (a popup menu, a popup with
+// wxBORDER_SIMPLE...): the client area is what is inside it, as
+// wxWindow::GetClientAreaOrigin() has it.
+static wxRect wxHaikuUnivBorder(const wxNonOwnedWindow *win)
+{
+    wxRenderer * const renderer = win->GetRenderer();
+    return renderer ? renderer->GetBorderDimensions(win->GetBorder())
+                    : wxRect();
+}
+
 void wxNonOwnedWindow::DoGetClientSize(int *width, int *height) const
 {
+    const wxRect border = wxHaikuUnivBorder(this);
+
     if ( width )
-        *width = m_content.width;
+        *width = wxMax(m_content.width - border.x - border.width, 0);
     if ( height )
-        *height = m_content.height;
+        *height = wxMax(m_content.height - border.y - border.height, 0);
 }
 
 void wxNonOwnedWindow::DoSetClientSize(int width, int height)
 {
+    const wxRect border = wxHaikuUnivBorder(this);
+
     HaikuSetContentRect(wxRect(m_content.x, m_content.y,
-                               wxMax(width, 1), wxMax(height, 1)));
+                               wxMax(width + border.x + border.width, 1),
+                               wxMax(height + border.y + border.height, 1)));
 }
 
 void wxNonOwnedWindow::DoSetSize(int x, int y, int width, int height,
