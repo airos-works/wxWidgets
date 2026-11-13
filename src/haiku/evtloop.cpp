@@ -25,9 +25,28 @@
 #include "wx/haiku/private.h"
 
 #include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <pthread.h>
+
+// ============================================================================
+// tracing
+// ============================================================================
+
+bool wxHaikuTraceEnabled = getenv("WXHAIKU_TRACE") != NULL;
+
+void wxHaikuTracePrintf(const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "[wx %7.3f] ", (double)(system_time() % 1000000000) / 1e6);
+    vfprintf(stderr, format, args);
+    fputc('\n', stderr);
+    fflush(stderr);
+    va_end(args);
+}
 
 // ============================================================================
 // the queue
@@ -101,7 +120,7 @@ wxHaikuEvent *PopEvent()
         // for the same window is of no interest any more
         wxHaikuEvent * const next = gs_queue.head;
         if ( next && next->type == event->type && next->handle == event->handle
-                && ((event->type == wxHAIKU_EVT_FRAME && !event->flag)
+                && (event->type == wxHAIKU_EVT_FRAME
                     || (event->type == wxHAIKU_EVT_MOUSE_MOVED
                         && next->transit == event->transit
                         && next->buttons == event->buttons)) )
@@ -290,11 +309,17 @@ bool wxHaikuProcessQueuedEvents()
 {
     // Empty the pipe and allow the next post to wake us again before looking
     // at the queue: a record queued after this point writes to the pipe.
+    // A wake up byte counts as something processed even if the records it
+    // announced were already taken by the previous call: the caller must
+    // not go to sleep in the dispatcher without having had its idle time
+    // (painting!) first, which it skips while the pipe is readable.
+    bool processed = false;
+
     if ( gs_queue.fds[0] != -1 )
     {
         char buf[64];
         while ( read(gs_queue.fds[0], buf, sizeof(buf)) > 0 )
-            ;
+            processed = true;
     }
 
     pthread_mutex_lock(&gs_queue.mutex);
@@ -319,8 +344,6 @@ bool wxHaikuProcessQueuedEvents()
         gs_deferredHead = gs_deferredTail = NULL;
     }
 
-    bool processed = false;
-
     // Records are taken one by one: a handler may run a nested event loop
     // (modal dialog, popup menu) which must see the following ones.
     while ( wxHaikuEvent *event = PopEvent() )
@@ -335,8 +358,18 @@ bool wxHaikuProcessQueuedEvents()
             continue;
         }
 
+        if ( event->type != wxHAIKU_EVT_MOUSE_MOVED )
+            wxHAIKU_TRACE("event %d handle=%u", (int)event->type,
+                          (unsigned)event->handle);
+
         DispatchEvent(*event);
         delete event;
+
+        // Events the handlers posted to themselves or to others come before
+        // the next record: a popup dismissed by a click passes the click on
+        // this way, and the release of the button must come after it.
+        if ( wxTheApp && wxTheApp->HasPendingEvents() )
+            wxTheApp->ProcessPendingEvents();
 
         processed = true;
     }

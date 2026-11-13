@@ -166,10 +166,14 @@ bool wxHaikuHandleViewMessage(BView *view, wxUint32 handle, BMessage *message)
 
 wxHaikuView::wxHaikuView(wxUint32 handle, BRect frame, uint32 resizingMode)
     : wxHaikuDrawView(frame, "wx", resizingMode,
-                      B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE
-                        | B_INPUT_METHOD_AWARE),
+                      B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE),
       m_handle(handle)
 {
+    // Not B_INPUT_METHOD_AWARE: input_server then shows the composition of
+    // input methods in its own window at the bottom of the screen and sends
+    // the confirmed text as key messages, which become wxEVT_CHAR like any
+    // other typed character. In-line composition would need the text
+    // controls to draw the unconfirmed text.
     // wx paints everything itself: app_server must not erase behind its back
     SetViewColor(B_TRANSPARENT_COLOR);
 }
@@ -206,6 +210,13 @@ void wxHaikuView::MouseMoved(BPoint where, uint32 transit,
 
 void wxHaikuView::MessageReceived(BMessage *message)
 {
+    if ( message->what == wxHAIKU_MSG_MAKE_FOCUS )
+    {
+        if ( !IsFocus() )
+            MakeFocus(true);
+        return;
+    }
+
     if ( !wxHaikuHandleViewMessage(this, m_handle, message) )
         wxHaikuDrawView::MessageReceived(message);
 }
@@ -217,7 +228,8 @@ void wxHaikuView::MessageReceived(BMessage *message)
 wxHaikuWindow::wxHaikuWindow(wxUint32 handle, BRect frame, const char *title,
                              window_look look, window_feel feel, uint32 flags)
     : BWindow(frame, title, look, feel, flags),
-      m_handle(handle)
+      m_handle(handle),
+      m_frameSerial(0)
 {
 }
 
@@ -297,20 +309,38 @@ void wxHaikuWindow::DispatchMessage(BMessage *message, BHandler *target)
 
 void wxHaikuWindow::MessageReceived(BMessage *message)
 {
-    if ( message->what == wxHAIKU_MSG_FRAME_SYNC )
+    if ( message->what == wxHAIKU_MSG_SET_FRAME )
     {
-        PostFrame(true);
+        BRect frame;
+        if ( message->FindRect("frame", &frame) == B_OK )
+        {
+            const BRect current = Frame();
+            if ( frame.LeftTop() != current.LeftTop() )
+                MoveTo(frame.LeftTop());
+            if ( frame.Width() != current.Width()
+                    || frame.Height() != current.Height() )
+            {
+                ResizeTo(frame.Width(), frame.Height());
+            }
+        }
+
+        m_frameSerial++;
+
+        BMessage reply(B_REPLY);
+        reply.AddRect("frame", Frame());
+        reply.AddInt32("serial", m_frameSerial);
+        message->SendReply(&reply);
         return;
     }
 
     BWindow::MessageReceived(message);
 }
 
-void wxHaikuWindow::PostFrame(bool sync)
+void wxHaikuWindow::PostFrame()
 {
     wxHaikuEvent *event = new wxHaikuEvent(wxHAIKU_EVT_FRAME, m_handle);
     event->rect = Frame();
-    event->flag = sync;
+    event->value = m_frameSerial;
     wxHaikuPostEvent(event);
 }
 

@@ -38,6 +38,18 @@ class WXDLLIMPEXP_FWD_CORE wxKeyEvent;
 class WXDLLIMPEXP_FWD_CORE wxBitmap;
 
 // ----------------------------------------------------------------------------
+// tracing
+// ----------------------------------------------------------------------------
+
+// Set WXHAIKU_TRACE=1 in the environment to get the input and window events
+// the port handles on stderr.
+extern bool wxHaikuTraceEnabled;
+void wxHaikuTracePrintf(const char *format, ...);
+
+#define wxHAIKU_TRACE(...) \
+    do { if ( wxHaikuTraceEnabled ) wxHaikuTracePrintf(__VA_ARGS__); } while ( 0 )
+
+// ----------------------------------------------------------------------------
 // conversions
 // ----------------------------------------------------------------------------
 
@@ -95,8 +107,8 @@ public:
     explicit wxHaikuViewLock(BView *view)
         : m_view(view), m_looper(NULL)
     {
-        // Remember the looper: the view may be removed from its window while
-        // the lock is held (RemoveSelf()) and has no looper to unlock then.
+        // The looper is remembered: the view may be removed from its window
+        // while the lock is held (RemoveSelf()).
         if ( m_view && m_view->Window() && m_view->LockLooper() )
             m_looper = m_view->Looper();
     }
@@ -375,14 +387,24 @@ public:
     virtual void WorkspaceActivated(int32 workspace, bool active);
 
 private:
-    void PostFrame(bool sync = false);
+    void PostFrame();
 
     wxUint32 m_handle;
+    int32 m_frameSerial;
 };
 
-// Posted by the wx thread to its BWindows after it moved or resized them:
-// answered with a wxHAIKU_EVT_FRAME record with the flag set.
-const uint32 wxHAIKU_MSG_FRAME_SYNC = 'wxFS';
+// Sent (synchronously) by the wx thread to a BWindow to move and resize it:
+// "frame" is the new frame. The looper thread does it, as BWindow keeps its
+// frame up to date from the messages app_server sends about every change and
+// computes moves relative to it: only the thread dispatching these messages
+// sees a consistent frame. The reply has the resulting "frame" and a
+// "serial" number, which the wxHAIKU_EVT_FRAME records posted from then on
+// carry (in "value"): records with a smaller one are out of date.
+const uint32 wxHAIKU_MSG_SET_FRAME = 'wxSF';
+
+// Sent by the wx thread to a view which got the wx focus: the looper thread
+// makes it the focus view of its window.
+const uint32 wxHAIKU_MSG_MAKE_FOCUS = 'wxMF';
 
 // private window feel of menus and tool tips: above everything, all
 // workspaces, never the active window (see headers/private/interface)

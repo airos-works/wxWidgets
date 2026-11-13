@@ -106,7 +106,7 @@ protected:
     void HaikuFrameChanged(const wxRect& content);
 
     // moves and resizes the BWindow to the content rectangle (screen
-    // coordinates); the looper's reports of this change are ignored
+    // coordinates); must not be called with the window locked
     void HaikuSetContentRect(const wxRect& content);
 
     // keyboard input always arrives at the top level window
@@ -128,15 +128,19 @@ protected:
 
     wxWindow *m_lastFocus;
 
-    // number of frame changes made by wx whose reports by the looper are
-    // still to come
-    int m_frameSyncPending;
+    // serial number of the last frame change this thread asked the looper
+    // for: frame reports with a smaller one are ignored
+    wxInt32 m_frameSerial;
 
     bool m_isModal;
     bool m_isActive;
     bool m_windowShown;
     bool m_sizeEventSent;
     bool m_shownOnce;
+
+    // created without a position and not moved since: the window is put
+    // in a sensible place when it is shown for the first time
+    bool m_autoPosition;
 
     wxDECLARE_ABSTRACT_CLASS(wxNonOwnedWindow);
 };

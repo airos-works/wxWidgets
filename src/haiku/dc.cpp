@@ -615,6 +615,18 @@ void wxHaikuDCImpl::Clear()
     if ( !colour.IsOk() )
         colour = *wxWHITE;
 
+    if ( m_backgroundBrush.IsOk()
+            && m_backgroundBrush.GetStyle() == wxBRUSHSTYLE_TRANSPARENT )
+    {
+        // Clearing with a transparent brush makes a bitmap with an alpha
+        // channel transparent, which is what the code doing it is after;
+        // an opaque target stays as it is (nothing is painted, as in wxMSW).
+        if ( !m_targetAlpha )
+            return;
+
+        colour = wxColour(0, 0, 0, 0);
+    }
+
     if ( m_targetAlpha && colour.Alpha() != 255 )
     {
         // app_server cannot fill with a translucent colour without blending

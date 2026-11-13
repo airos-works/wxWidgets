@@ -1301,7 +1301,10 @@ wxRect wxWindow::ScrollNoRefresh(int dx, int dy, const wxRect *rectTotal)
 
 void wxWindow::OnKeyDown(wxKeyEvent& event)
 {
-#if wxUSE_MENUS
+    // A lone Alt or F10 opening the menu bar is a Windows habit: on Haiku
+    // modifier keys do nothing by themselves (and what wx calls Alt there
+    // is the Control key), and F10 is a key like any other for accelerators.
+#if wxUSE_MENUS && !defined(__WXHAIKU__)
     int key = event.GetKeyCode();
     if ( !event.ControlDown() && (key == WXK_ALT || key == WXK_F10) )
     {
@@ -1312,7 +1315,7 @@ void wxWindow::OnKeyDown(wxKeyEvent& event)
     }
 
     ms_winLastAltPress = NULL;
-#endif // wxUSE_MENUS
+#endif // wxUSE_MENUS && !__WXHAIKU__
 
 #if wxUSE_ACCEL
     for ( wxWindow *win = this; win; win = win->GetParent() )

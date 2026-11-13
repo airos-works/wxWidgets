@@ -372,7 +372,7 @@ bool wxPopupTransientWindow::Show( bool show )
     }
 #endif
 
-#if defined( __WXMAC__)
+#if defined( __WXMAC__) || defined(__WXHAIKU__)
     if (!show && m_child && m_child->HasCapture())
     {
         m_child->ReleaseMouse();
@@ -436,6 +436,14 @@ bool wxPopupTransientWindow::Show( bool show )
     if (show && m_child)
     {
         // Assume that the mouse is outside the popup to begin with
+        m_child->CaptureMouse();
+    }
+#elif defined(__WXHAIKU__)
+    // The capture stays for as long as the popup is shown: wxHaiku gives the
+    // mouse events inside a popup which captured the mouse to the windows
+    // of the popup as usual and only the others to the capturing window.
+    if (show && m_child && !m_child->HasCapture())
+    {
         m_child->CaptureMouse();
     }
 #endif

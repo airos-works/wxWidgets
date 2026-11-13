@@ -27,6 +27,7 @@
 #include "wx/haiku/private.h"
 
 #include <Cursor.h>
+#include <Messenger.h>
 #include <InterfaceDefs.h>
 #include <Screen.h>
 
@@ -169,6 +170,34 @@ const ButtonInfo gs_buttonInfo[] =
     { 0x10, wxEVT_AUX2_DOWN, wxEVT_AUX2_UP, wxEVT_AUX2_DCLICK },
 };
 
+// the deepest shown window of the tree at the screen position or NULL
+wxWindowHaiku *FindWindowAt(wxWindowHaiku *win, const wxPoint& screen)
+{
+    if ( !win->IsShown() )
+        return NULL;
+
+    const wxRect rect(win->HaikuGetScreenOrigin(), win->HaikuGetViewSize());
+    if ( !rect.Contains(screen) )
+        return NULL;
+
+    // the last child is the topmost one
+    for ( wxWindowList::compatibility_iterator
+            node = win->GetChildren().GetLast();
+          node;
+          node = node->GetPrevious() )
+    {
+        wxWindow * const child = node->GetData();
+        if ( child->IsTopLevel() )
+            continue;
+
+        wxWindowHaiku * const found = FindWindowAt(child, screen);
+        if ( found )
+            return found;
+    }
+
+    return win;
+}
+
 void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
 {
     // drop the copies of a message already handled
@@ -184,6 +213,17 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
     gs_lastMouse.where = he.screenWhere;
     gs_lastMouse.buttons = he.buttons;
 
+    wxHAIKU_TRACE("mouse %s src=%u (%s) where=%g,%g screen=%g,%g buttons=%d "
+                  "clicks=%d transit=%d capture=%u button=%u",
+                  he.type == wxHAIKU_EVT_MOUSE_DOWN ? "down"
+                    : he.type == wxHAIKU_EVT_MOUSE_UP ? "up" : "move",
+                  (unsigned)source->GetHaikuHandle(),
+                  (const char *)wxString(source->GetClassInfo()->GetClassName()).utf8_str(),
+                  he.where.x, he.where.y, he.screenWhere.x, he.screenWhere.y,
+                  (int)he.buttons, (int)he.clicks, (int)he.transit,
+                  gs_captureWindow ? (unsigned)gs_captureWindow->GetHaikuHandle() : 0,
+                  gs_buttonWindow ? (unsigned)gs_buttonWindow->GetHaikuHandle() : 0);
+
     const int32 oldButtons = gs_buttons;
     gs_buttons = he.buttons;
     gs_modifiers = he.modifiers;
@@ -196,7 +236,57 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
     wxWindowHaiku *target = gs_captureWindow ? gs_captureWindow
                                              : gs_buttonWindow ? gs_buttonWindow
                                                                : source;
-    const bool captured = target != source || gs_captureWindow == source;
+
+    // A popup captures the mouse to learn about the clicks outside of it
+    // (wxPopupTransientWindow keeps the capture while it is shown): the
+    // windows inside of the popup still get their events. The message may
+    // have come through the capturing view or through the one under the
+    // pointer, whichever was faster: find the window from the position.
+    if ( gs_captureWindow && !gs_buttonWindow )
+    {
+        wxNonOwnedWindow * const popup = gs_captureWindow->GetTLW();
+        if ( popup && popup->HaikuAvoidsFocus() )
+        {
+            wxWindowHaiku * const under = FindWindowAt(popup, screen);
+            if ( under )
+                target = under;
+        }
+    }
+    else if ( gs_captureWindow && gs_buttonWindow
+                && gs_buttonWindow != gs_captureWindow )
+    {
+        // a button pressed in such a window before: it keeps the events
+        // until the buttons are released
+        wxNonOwnedWindow * const popup = gs_captureWindow->GetTLW();
+        if ( popup && popup->HaikuAvoidsFocus()
+                && gs_buttonWindow->GetTLW() == popup )
+        {
+            target = gs_buttonWindow;
+        }
+    }
+
+    // Without any capture the message belongs to the window under the
+    // pointer. It may have come through a view which only got it because of
+    // an event mask it had when the message was sent (a popup hidden since,
+    // the view of the last capture): look the window up then.
+    if ( !gs_captureWindow && !gs_buttonWindow
+            && !(he.type == wxHAIKU_EVT_MOUSE_MOVED
+                    && (he.transit == B_EXITED_VIEW
+                            || he.transit == B_OUTSIDE_VIEW)) )
+    {
+        if ( !source->IsShownOnScreen()
+                || !wxRect(source->HaikuGetScreenOrigin(),
+                           source->HaikuGetViewSize()).Contains(screen) )
+        {
+            wxWindow * const under = wxFindWindowAtPoint(screen);
+            if ( !under )
+                return;
+
+            target = under;
+        }
+    }
+
+    const bool captured = gs_captureWindow || gs_buttonWindow;
 
     wxPoint pos;
     if ( target == source )
@@ -244,7 +334,13 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
         case wxHAIKU_EVT_MOUSE_MOVED:
             {
                 // enter and leave
-                if ( gs_captureWindow || gs_buttonWindow )
+                if ( gs_captureWindow && target != gs_captureWindow
+                        && !gs_buttonWindow )
+                {
+                    // over a window of a popup which captured the mouse
+                    SetMouseWindow(target, he);
+                }
+                else if ( gs_captureWindow || gs_buttonWindow )
                 {
                     // the capturing window is "entered" while the pointer
                     // is really over it
@@ -255,13 +351,15 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                 else if ( he.transit == B_EXITED_VIEW
                             || he.transit == B_OUTSIDE_VIEW )
                 {
+                    // the pointer may have gone to another window of ours:
+                    // its own message says so if it has not already
                     if ( gs_mouseWindow == source )
                         SetMouseWindow(NULL, he);
                     return;
                 }
                 else
                 {
-                    SetMouseWindow(source, he);
+                    SetMouseWindow(target, he);
                 }
 
                 if ( wxWindowHaiku::HaikuFindByHandle(target->GetHaikuHandle()) != target )
@@ -275,9 +373,13 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
             {
                 if ( !gs_captureWindow && !gs_buttonWindow )
                 {
-                    SetMouseWindow(source, he);
-                    gs_buttonWindow = source;
-                    target = source;
+                    SetMouseWindow(target, he);
+                    gs_buttonWindow = target;
+                }
+                else if ( !gs_buttonWindow && target != gs_captureWindow )
+                {
+                    // inside a popup which captured the mouse
+                    gs_buttonWindow = target;
                 }
 
                 const int32 pressed = he.buttons & ~oldButtons;
@@ -1037,13 +1139,12 @@ void wxWindowHaiku::SetFocus()
 
     gs_focusWindow = this;
 
-    // the native focus view gets the input method events
-    if ( m_view )
-    {
-        wxHaikuViewLock lock(m_view);
-        if ( lock.IsLocked() )
-            m_view->MakeFocus(true);
-    }
+    // The native focus view gets the input method events. BView::MakeFocus()
+    // talks to input_server synchronously when input method aware views are
+    // involved, which can take until the next input event: the looper thread
+    // does it, this thread must not wait.
+    if ( m_view && m_view->Window() )
+        BMessenger(m_view).SendMessage(wxHAIKU_MSG_MAKE_FOCUS);
 
     wxChildFocusEvent eventFocus(AsWindow(this));
     HandleWindowEvent(eventFocus);
@@ -1130,9 +1231,16 @@ void wxWindowHaiku::HaikuApplyCapture(bool capture)
     // the pointer is, buttons down or not: this is what CaptureMouse() means
     // (popups are dismissed by a click outside of them).
     wxHaikuViewLock lock(m_view);
+    status_t status = B_ERROR;
     if ( lock.IsLocked() )
-        m_view->SetEventMask(capture ? B_POINTER_EVENTS : 0,
-                             capture ? B_NO_POINTER_HISTORY : 0);
+    {
+        status = m_view->SetEventMask(capture ? B_POINTER_EVENTS : 0,
+                                      capture ? B_NO_POINTER_HISTORY : 0);
+    }
+
+    wxHAIKU_TRACE("capture %s win=%u (%s) status=%d", capture ? "on" : "off",
+                  (unsigned)m_handle, (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  (int)status);
 }
 
 void wxWindowHaiku::DoCaptureMouse()
