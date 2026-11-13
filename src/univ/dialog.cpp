@@ -173,9 +173,14 @@ int wxDialog::ShowModal()
     // use the apps top level window as parent if none given unless explicitly
     // forbidden
     wxWindow * const parent = GetParentForModalDialog();
-    if ( parent && parent != this )
+    if ( parent && parent != this && parent != m_parent )
     {
-        m_parent = parent;
+        // The dialog must be in the children list of the window m_parent
+        // points to: with only the pointer changed its creation parent kept
+        // a pointer to it after it was destroyed.
+        if ( m_parent )
+            m_parent->RemoveChild(this);
+        parent->AddChild(this);
     }
 
     Show(true);

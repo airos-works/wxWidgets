@@ -68,6 +68,7 @@ protected:
     virtual void HaikuGetWindowType(int *look, int *feel,
                                     wxUint32 *flags) const wxOVERRIDE;
     virtual void HaikuActivated(bool active) wxOVERRIDE;
+    virtual void HaikuWindowCreated(BWindow *window) wxOVERRIDE;
 
     wxString m_title;
 

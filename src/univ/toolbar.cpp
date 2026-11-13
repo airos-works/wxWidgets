@@ -524,6 +524,10 @@ void wxToolBar::DoLayout()
             tool->m_width = size.x;
             tool->m_height = size.y;
 
+            // (not only when its place is drawn: the control itself may
+            // cover other tools until then)
+            control->Move(tool->m_x, tool->m_y);
+
             *pCur += tool->m_width;
         }
         *pCur += margin;

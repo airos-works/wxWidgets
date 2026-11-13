@@ -31,6 +31,11 @@ JOBS=${WX_JOBS:-16}
 SAMPLES=()
 [[ -z ${WX_SAMPLES:-} ]] || SAMPLES=(-DwxBUILD_SAMPLES=ALL)
 [[ -f $SDK/env.sh ]] || { echo "no air/OS SDK at $SDK" >&2; exit 1; }
+# wxWebView on the summit_webkit engine, if its development files are staged
+WEBVIEW=(-DwxUSE_WEBVIEW_SUMMIT=OFF)
+if [[ -f $DEPS/develop/headers/summit-webkit/WebKit/WebKitView.h ]]; then
+	WEBVIEW=(-DwxUSE_WEBVIEW=ON -DwxUSE_WEBVIEW_SUMMIT=ON -DSUMMIT_WEBKIT_ROOT="$DEPS")
+fi
 
 if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.ninja ]]; then
 	cmake -S "$ROOT" -B "$BUILD" -G Ninja \
@@ -55,6 +60,7 @@ if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.nin
 		-DwxUSE_PRIVATE_FONTS=ON \
 		-DwxUSE_LIBICONV=OFF \
 		-DwxUSE_GRAPHICS_CONTEXT=ON \
+		"${WEBVIEW[@]}" \
 		${WX_CMAKE_ARGS:-}
 fi
 

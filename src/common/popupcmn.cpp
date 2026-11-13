@@ -176,6 +176,14 @@ void wxPopupWindowBase::Position(const wxPoint& ptOrigin,
             // do position the control above the window
             y -= size.y + sizeSelf.y;
         }
+#ifdef __WXHAIKU__
+        else
+        {
+            // neither below nor above: as far up as needed to show all of
+            // it, like the menus of the system
+            y = wxMax(posScreen.y, posScreen.y + sizeScreen.y - sizeSelf.y);
+        }
+#endif
         //else: not enough space below nor above, leave below
     }
 

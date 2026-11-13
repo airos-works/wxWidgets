@@ -108,7 +108,7 @@ wxPoint ClientPosFromScreen(wxWindowHaiku *win, const wxPoint& screen)
     return screen - win->HaikuGetScreenOrigin() - win->GetClientAreaOrigin();
 }
 
-void SendMouseEvent(wxWindowHaiku *win, wxEventType type,
+bool SendMouseEvent(wxWindowHaiku *win, wxEventType type,
                     const wxPoint& pos, const wxHaikuEvent& he,
                     int clickCount = -1)
 {
@@ -121,7 +121,7 @@ void SendMouseEvent(wxWindowHaiku *win, wxEventType type,
     event.m_clickCount = clickCount;
     FillMouseState(event, he.buttons, he.modifiers);
 
-    win->HandleWindowEvent(event);
+    return win->HandleWindowEvent(event);
 }
 
 // the pointer is in the given window now (NULL: in none of ours)
@@ -287,13 +287,23 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                   gs_captureWindow ? (unsigned)gs_captureWindow->GetHaikuHandle() : 0,
                   gs_buttonWindow ? (unsigned)gs_buttonWindow->GetHaikuHandle() : 0);
 
-    const int32 oldButtons = gs_buttons;
-    gs_buttons = he.buttons;
-    gs_modifiers = he.modifiers;
-
     const wxPoint screen((int)floorf(he.screenWhere.x),
                          (int)floorf(he.screenWhere.y));
     gs_mousePos = screen;
+
+    // The moves of a drag and drop session (ours or another application's:
+    // the button was pressed elsewhere) are no mouse events for the windows
+    // the pointer passes, as in the other ports.
+    if ( he.type == wxHAIKU_EVT_MOUSE_MOVED && he.flag )
+    {
+        if ( !gs_captureWindow && !gs_buttonWindow )
+            SetMouseWindow(NULL, he);
+        return;
+    }
+
+    const int32 oldButtons = gs_buttons;
+    gs_buttons = he.buttons;
+    gs_modifiers = he.modifiers;
 
     // the window under the pointer may be a sibling above the one whose
     // view got the message
@@ -510,10 +520,25 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                     if ( !(released & info.mask) )
                         continue;
 
-                    SendMouseEvent(target, info.up, pos, he, 1);
+                    const bool
+                        processed = SendMouseEvent(target, info.up, pos, he, 1);
 
                     if ( wxWindowHaiku::HaikuFindByHandle(handle) != target )
                         break;
+
+                    // The release of the secondary button asks for the
+                    // context menu if nobody used the event itself, as the
+                    // native ports do; the event goes up to the parents.
+                    if ( info.up == wxEVT_RIGHT_UP && !processed )
+                    {
+                        wxContextMenuEvent
+                            eventMenu(wxEVT_CONTEXT_MENU, target->GetId(), screen);
+                        eventMenu.SetEventObject(target);
+                        target->HandleWindowEvent(eventMenu);
+
+                        if ( wxWindowHaiku::HaikuFindByHandle(handle) != target )
+                            break;
+                    }
                 }
 
                 if ( !he.buttons )
@@ -923,6 +948,10 @@ void wxWindowHaiku::DoMoveWindow(int x, int y, int width, int height)
 
     m_rect = wxRect(x, y, width, height);
 
+    wxHAIKU_TRACE("geometry %u (%s) %d,%d %dx%d", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  x, y, width, height);
+
     if ( !m_view )
         return;
 
@@ -1010,6 +1039,16 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
     if ( nx == m_rect.x && ny == m_rect.y
             && width == m_rect.width && height == m_rect.height )
     {
+        // The sizers ask for a size event even if nothing changed
+        // (wxSizerItem::SetDimension()): a nested window lays out its
+        // children again, one of them may have been shown or hidden.
+        if ( sizeFlags & wxSIZE_FORCE_EVENT )
+        {
+            wxSizeEvent event(wxSize(width, height), GetId());
+            event.SetEventObject(this);
+            HandleWindowEvent(event);
+        }
+
         return;
     }
 
@@ -1064,6 +1103,11 @@ bool wxWindowHaiku::Show(bool show)
         if ( gs_buttonWindow == this )
             gs_buttonWindow = NULL;
     }
+
+    // as the other ports do, to the window itself
+    wxShowEvent eventShow(GetId(), show);
+    eventShow.SetEventObject(this);
+    HandleWindowEvent(eventShow);
 
     return true;
 }
@@ -1388,6 +1432,46 @@ void wxWindowHaiku::HaikuApplyCursor()
     {
         BCursor standard(B_CURSOR_ID_SYSTEM_DEFAULT);
         m_view->SetViewCursor(&standard, true);
+    }
+}
+
+static void wxHaikuApplyCursorRecursively(wxWindowHaiku *win);
+
+// What the views of a window could not be told while the top level window
+// had no BWindow (a view without a window has no cursor, no event mask and
+// cannot be the focus view).
+static void wxHaikuRealizedRecursively(wxWindowHaiku *win)
+{
+    // the windows inside inherit the cursor
+    if ( win->GetCursor().IsOk() )
+    {
+        wxHaikuApplyCursorRecursively(win);
+        return;
+    }
+
+    for ( wxWindowList::compatibility_iterator
+            node = win->GetChildren().GetFirst();
+          node;
+          node = node->GetNext() )
+    {
+        wxWindow * const child = node->GetData();
+        if ( !child->IsTopLevel() )
+            wxHaikuRealizedRecursively(child);
+    }
+}
+
+void wxHaikuWindowRealized(wxNonOwnedWindow *tlw)
+{
+    wxHaikuRealizedRecursively(tlw);
+
+    if ( gs_captureWindow && gs_captureWindow->GetTLW() == tlw )
+        gs_captureWindow->HaikuApplyCapture(true);
+
+    if ( gs_focusWindow && gs_focusWindow->GetTLW() == tlw )
+    {
+        BView * const view = gs_focusWindow->GetHaikuView();
+        if ( view )
+            BMessenger(view).SendMessage(wxHAIKU_MSG_MAKE_FOCUS);
     }
 }
 

@@ -38,7 +38,13 @@ public:
     {
     }
 
-    virtual ~wxCursorRefData() { delete m_cursor; }
+    virtual ~wxCursorRefData()
+    {
+        // (a cursor of a static object, destroyed after the BApplication,
+        // cannot tell app_server any more and is left alone)
+        if ( be_app )
+            delete m_cursor;
+    }
 
     virtual bool IsOk() const wxOVERRIDE { return m_cursor != NULL; }
 

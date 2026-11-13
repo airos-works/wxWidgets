@@ -28,15 +28,140 @@
 #include <Messenger.h>
 #include <Screen.h>
 
+#include <algorithm>
+#include <map>
+#include <vector>
+
+#include <stdlib.h>
+
 // implemented in window.cpp
 void wxHaikuKillFocus();
 wxWindowHaiku *wxHaikuGetFocusWindow();
+void wxHaikuWindowRealized(wxNonOwnedWindow *tlw);
 
 namespace
 {
 
 // position of the next window created without one
 int gs_cascade = 0;
+
+// ----------------------------------------------------------------------------
+// decorations
+// ----------------------------------------------------------------------------
+
+struct DecorationInsets
+{
+    int left, top, right, bottom;
+};
+
+// The decorator draws the same border on the left, right and bottom, the rest
+// of the height is the tab. Only the sizes are compared: the position BWindow
+// knows may lag behind the one app_server has. The window must be locked.
+bool ComputeDecorationInsets(BWindow *window, DecorationInsets *insets)
+{
+    insets->left = insets->top = insets->right = insets->bottom = 0;
+
+    if ( window->Look() == B_NO_BORDER_WINDOW_LOOK )
+        return true;
+
+    const BRect frame = window->Frame();
+    const BRect deco = window->DecoratorFrame();
+    if ( !deco.IsValid() )
+        return false;
+
+    const int extraW = (int)(deco.Width() - frame.Width()),
+              extraH = (int)(deco.Height() - frame.Height());
+    if ( extraW < 0 || extraH < 0 || extraW > 200 || extraH > 400 )
+        return false;
+
+    insets->left = extraW / 2;
+    insets->right = extraW - insets->left;
+    insets->bottom = wxMin(insets->right, extraH);
+    insets->top = extraH - insets->bottom;
+    return true;
+}
+
+// The decorations of the windows of a kind are all the same: they are known
+// before the window of a wxNonOwnedWindow exists. The flags may change the
+// border (B_NOT_RESIZABLE), the feel does not.
+typedef std::map<std::pair<int, wxUint32>, DecorationInsets> InsetsCache;
+InsetsCache gs_insetsCache;
+
+const wxUint32 INSETS_FLAGS = B_NOT_RESIZABLE | B_NOT_H_RESIZABLE
+                                | B_NOT_V_RESIZABLE | B_NOT_CLOSABLE
+                                | B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE;
+
+DecorationInsets GetDecorationInsets(int look, wxUint32 flags)
+{
+    DecorationInsets insets = { 0, 0, 0, 0 };
+    if ( look == B_NO_BORDER_WINDOW_LOOK )
+        return insets;
+
+    const std::pair<int, wxUint32> key(look, flags & INSETS_FLAGS);
+    const InsetsCache::const_iterator it = gs_insetsCache.find(key);
+    if ( it != gs_insetsCache.end() )
+        return it->second;
+
+    // Asked once for every kind of window: a window which is never shown nor
+    // run. A new looper is locked by the thread which created it, Quit()
+    // deletes it at once as it never ran.
+    BWindow * const probe = new BWindow(BRect(0, 0, 199, 99), "",
+                                        (window_look)look,
+                                        B_NORMAL_WINDOW_FEEL,
+                                        flags & INSETS_FLAGS);
+    if ( ComputeDecorationInsets(probe, &insets) )
+        gs_insetsCache[key] = insets;
+    probe->Quit();
+
+    return insets;
+}
+
+void RememberDecorationInsets(int look, wxUint32 flags,
+                              const DecorationInsets& insets)
+{
+    gs_insetsCache[std::make_pair(look, flags & INSETS_FLAGS)] = insets;
+}
+
+// ----------------------------------------------------------------------------
+// windows which may give their BWindow back
+// ----------------------------------------------------------------------------
+
+// the handles of the hidden windows which still have their BWindow
+std::vector<wxUint32> gs_hiddenRealized;
+
+// how long a hidden window keeps its BWindow (WXHAIKU_HIDDEN_WINDOW_MS in
+// the environment overrides it, for tests)
+long HiddenWindowDelay()
+{
+    static long s_delay = -1;
+    if ( s_delay < 0 )
+    {
+        const char * const env = getenv("WXHAIKU_HIDDEN_WINDOW_MS");
+        s_delay = env ? atol(env) : 30000;
+        if ( s_delay < 0 )
+            s_delay = 30000;
+    }
+
+    return s_delay;
+}
+
+bool HasNativeContent(const wxWindow *win)
+{
+    if ( win->HaikuHasNativeContent() )
+        return true;
+
+    for ( wxWindowList::compatibility_iterator
+            node = win->GetChildren().GetFirst();
+          node;
+          node = node->GetNext() )
+    {
+        const wxWindow * const child = node->GetData();
+        if ( !child->IsTopLevel() && HasNativeContent(child) )
+            return true;
+    }
+
+    return false;
+}
 
 // ----------------------------------------------------------------------------
 // key translation
@@ -293,6 +418,7 @@ void wxNonOwnedWindow::Init()
     m_sizeEventSent = false;
     m_shownOnce = false;
     m_autoPosition = false;
+    m_hiddenSince = 0;
 
     m_isShown = false;
 }
@@ -314,28 +440,13 @@ bool wxNonOwnedWindow::Create(wxWindow *parent,
     if ( parent )
         parent->AddChild(this);
 
-    int look, feel;
-    wxUint32 flags;
-    HaikuGetWindowType(&look, &feel, &flags);
-
-    // The window is created somewhere and put in place below, when the size
-    // of its decorations is known.
     const int w = wxMax(size.x == wxDefaultCoord ? 400 : size.x, 1),
               h = wxMax(size.y == wxDefaultCoord ? 300 : size.y, 1);
 
-    wxHaikuWindow * const
-        window = new wxHaikuWindow(m_handle, wxHaikuRect(100, 100, w, h), "",
-                                   (window_look)look, (window_feel)feel, flags);
-    m_window = window;
-
-    // the root view follows the window: app_server resizes it together with
-    // the window, before wx hears about it
-    m_view = new wxHaikuView(m_handle, window->Bounds(), B_FOLLOW_ALL);
-    window->AddChild(m_view);
-
-    // A new BWindow is locked by the thread which created it until it runs:
-    // start the looper now, the window stays hidden until Show().
-    window->Run();
+    // The root view: the views of the children are added to it. There is no
+    // BWindow yet (see HaikuRealize()); once there is, the view follows the
+    // window, app_server resizes it together with the window.
+    m_view = new wxHaikuView(m_handle, wxHaikuRect(0, 0, w, h), B_FOLLOW_ALL);
 
     m_content = wxRect(100, 100, w, h);
     m_rect = wxRect(0, 0, w, h);
@@ -380,6 +491,12 @@ wxNonOwnedWindow::~wxNonOwnedWindow()
         m_window = NULL;
         m_view = NULL;
     }
+    else
+    {
+        // never shown, or its window was given back: the root view is ours
+        delete m_view;
+        m_view = NULL;
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -397,7 +514,24 @@ void wxNonOwnedWindow::HaikuGetWindowType(int *look, int *feel,
 void wxNonOwnedWindow::HaikuUpdateWindowType()
 {
     if ( !m_window )
+    {
+        // only the decorations matter until there is a window: keep the
+        // outer rectangle if they change
+        const int left = m_decoLeft, top = m_decoTop,
+                  right = m_decoRight, bottom = m_decoBottom;
+        HaikuUpdateDecorationInsets();
+        if ( left != m_decoLeft || top != m_decoTop
+                || right != m_decoRight || bottom != m_decoBottom )
+        {
+            const wxRect outer(m_content.x - left, m_content.y - top,
+                               m_content.width + left + right,
+                               m_content.height + top + bottom);
+            HaikuSetContentRect(wxRect(outer.x + m_decoLeft, outer.y + m_decoTop,
+                                       wxMax(outer.width - m_decoLeft - m_decoRight, 1),
+                                       wxMax(outer.height - m_decoTop - m_decoBottom, 1)));
+        }
         return;
+    }
 
     int look, feel;
     wxUint32 flags;
@@ -443,36 +577,28 @@ void wxNonOwnedWindow::HaikuUpdateWindowType()
 
 void wxNonOwnedWindow::HaikuUpdateDecorationInsets()
 {
-    m_decoLeft = m_decoTop = m_decoRight = m_decoBottom = 0;
     m_decoValid = true;
 
-    if ( !m_window )
-        return;
+    int look, feel;
+    wxUint32 flags;
+    HaikuGetWindowType(&look, &feel, &flags);
 
-    wxHaikuWindowLock lock(m_window);
-    if ( !lock.IsLocked() )
-        return;
+    DecorationInsets insets = { 0, 0, 0, 0 };
+    if ( m_window )
+    {
+        wxHaikuWindowLock lock(m_window);
+        if ( lock.IsLocked() && ComputeDecorationInsets(m_window, &insets) )
+            RememberDecorationInsets(m_window->Look(), m_window->Flags(), insets);
+    }
+    else
+    {
+        insets = GetDecorationInsets(look, flags);
+    }
 
-    if ( m_window->Look() == B_NO_BORDER_WINDOW_LOOK )
-        return;
-
-    // Only the sizes are compared: the position BWindow knows may lag behind
-    // the one app_server has. The decorators have the same border on the
-    // left, right and bottom, the rest of the height is the tab.
-    const BRect frame = m_window->Frame();
-    const BRect deco = m_window->DecoratorFrame();
-    if ( !deco.IsValid() )
-        return;
-
-    const int extraW = (int)(deco.Width() - frame.Width()),
-              extraH = (int)(deco.Height() - frame.Height());
-    if ( extraW < 0 || extraH < 0 || extraW > 200 || extraH > 400 )
-        return;
-
-    m_decoLeft = extraW / 2;
-    m_decoRight = extraW - m_decoLeft;
-    m_decoBottom = wxMin(m_decoRight, extraH);
-    m_decoTop = extraH - m_decoBottom;
+    m_decoLeft = insets.left;
+    m_decoTop = insets.top;
+    m_decoRight = insets.right;
+    m_decoBottom = insets.bottom;
 }
 
 void wxNonOwnedWindow::HaikuGetDecorationInsets(int *left, int *top,
@@ -625,7 +751,20 @@ void wxNonOwnedWindow::DoMoveWindow(int x, int y, int width, int height)
 void wxNonOwnedWindow::HaikuSetContentRect(const wxRect& content)
 {
     if ( !m_window )
+    {
+        // no window yet: the geometry is ours alone, the root view (not
+        // attached, so not locked) gets the size the window will have
+        if ( m_view )
+            m_view->ResizeTo(wxMax(content.width, 1) - 1,
+                             wxMax(content.height, 1) - 1);
+
+        wxHAIKU_TRACE("set frame tlw=%u (no window) %d,%d %dx%d",
+                      (unsigned)m_handle, content.x, content.y,
+                      content.width, content.height);
+
+        HaikuFrameChanged(content);
         return;
+    }
 
     // The looper thread moves and resizes the window (see
     // wxHAIKU_MSG_SET_FRAME): this thread waits for it, which is safe as the
@@ -682,6 +821,8 @@ void wxNonOwnedWindow::HaikuFrameChanged(const wxRect& content)
 
         if ( HaikuFindByHandle(handle) != this )
             return;
+
+        HaikuAfterSizeEvent();
     }
 
     if ( moved )
@@ -698,12 +839,20 @@ void wxNonOwnedWindow::DoSetSizeHints(int minW, int minH,
 {
     wxNonOwnedWindowBase::DoSetSizeHints(minW, minH, maxW, maxH, incW, incH);
 
+    HaikuApplySizeLimits();
+}
+
+void wxNonOwnedWindow::HaikuApplySizeLimits()
+{
     if ( !m_window )
         return;
 
     wxHaikuWindowLock lock(m_window);
     if ( !lock.IsLocked() )
         return;
+
+    const int minW = GetMinWidth(), minH = GetMinHeight(),
+              maxW = GetMaxWidth(), maxH = GetMaxHeight();
 
     // the limits of the BWindow are those of its content, and a width of n
     // pixels is n - 1 in the Be API
@@ -729,9 +878,6 @@ bool wxNonOwnedWindow::Show(bool show)
     if ( !wxWindowBase::Show(show) )
         return false;
 
-    if ( !m_window )
-        return true;
-
     if ( show && !m_shownOnce )
     {
         // A size event before the window appears for the first time: the
@@ -743,7 +889,15 @@ bool wxNonOwnedWindow::Show(bool show)
         wxSizeEvent event(GetSize(), GetId());
         event.SetEventObject(this);
         HandleWindowEvent(event);
+
+        HaikuAfterSizeEvent();
     }
+
+    // The window is created now if it does not exist: after the layout of
+    // the first show, which is cheaper without it (the views of the children
+    // are moved without talking to app_server).
+    if ( show )
+        HaikuRealize();
 
     if ( !show )
     {
@@ -751,22 +905,168 @@ bool wxNonOwnedWindow::Show(bool show)
         wxWindowHaiku * const focus = wxHaikuGetFocusWindow();
         if ( focus && focus->GetTLW() == this )
             wxHaikuKillFocus();
+
+        // it may give its BWindow back if it stays hidden
+        if ( m_window && HaikuCanUnrealize() )
+        {
+            m_hiddenSince = wxGetLocalTimeMillis();
+            if ( std::find(gs_hiddenRealized.begin(), gs_hiddenRealized.end(),
+                           m_handle) == gs_hiddenRealized.end() )
+                gs_hiddenRealized.push_back(m_handle);
+        }
     }
 
-    wxHAIKU_TRACE("%s tlw=%u (%s)", show ? "show" : "hide", (unsigned)m_handle,
-                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str());
+    wxHAIKU_TRACE("%s tlw=%u (%s)%s", show ? "show" : "hide", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  m_window ? "" : " (no window)");
 
-    wxHaikuWindowLock lock(m_window);
-    if ( lock.IsLocked() && show != m_windowShown )
+    if ( m_window )
     {
-        if ( show )
-            m_window->Show();
-        else
-            m_window->Hide();
-        m_windowShown = show;
+        wxHaikuWindowLock lock(m_window);
+        if ( lock.IsLocked() && show != m_windowShown )
+        {
+            if ( show )
+                m_window->Show();
+            else
+                m_window->Hide();
+            m_windowShown = show;
+        }
     }
+
+    // (not with the window locked: handlers may do anything)
+    wxShowEvent eventShow(GetId(), show);
+    eventShow.SetEventObject(this);
+    HandleWindowEvent(eventShow);
 
     return true;
+}
+
+// ----------------------------------------------------------------------------
+// the BWindow
+// ----------------------------------------------------------------------------
+
+bool wxNonOwnedWindow::HaikuRealize()
+{
+    if ( m_window )
+        return true;
+
+    if ( !m_view || IsBeingDeleted() )
+        return false;
+
+    int look, feel;
+    wxUint32 flags;
+    HaikuGetWindowType(&look, &feel, &flags);
+    if ( m_isModal )
+        feel = B_MODAL_APP_WINDOW_FEEL;
+
+    // The reports of a window this one had before carry smaller serial
+    // numbers: they are ignored.
+    m_frameSerial++;
+
+    wxHaikuWindow * const
+        window = new wxHaikuWindow(m_handle, wxHaikuRect(m_content), "",
+                                   (window_look)look, (window_feel)feel, flags,
+                                   m_frameSerial);
+
+    // the root view fills the window and follows it
+    m_view->MoveTo(0, 0);
+    m_view->ResizeTo(wxMax(m_content.width, 1) - 1,
+                     wxMax(m_content.height, 1) - 1);
+    window->AddChild(m_view);
+
+    m_window = window;
+    m_windowShown = false;
+
+    // A new BWindow is locked by the thread which created it until it runs:
+    // what was set while there was no window is applied without waiting.
+    HaikuWindowCreated(window);
+
+    window->Run();
+
+    // the decorations as the decorator really draws them
+    HaikuUpdateDecorationInsets();
+
+    wxHAIKU_TRACE("realized tlw=%u (%s) %d,%d %dx%d", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  m_content.x, m_content.y, m_content.width, m_content.height);
+
+    // capture, focus, cursors of the windows inside
+    wxHaikuWindowRealized(this);
+
+    return true;
+}
+
+void wxNonOwnedWindow::HaikuWindowCreated(BWindow *WXUNUSED(window))
+{
+    HaikuApplySizeLimits();
+}
+
+bool wxNonOwnedWindow::HaikuUnrealize()
+{
+    if ( !m_window || IsShown() || m_windowShown || IsBeingDeleted() )
+        return false;
+
+    // not while one of its windows has the mouse or keeps a native view of
+    // its own (OpenGL, web view) which would have to start over
+    wxWindow * const capture = wxWindow::GetCapture();
+    if ( capture && capture->GetTLW() == this )
+        return false;
+    if ( HasNativeContent(this) )
+        return false;
+
+    BWindow * const window = m_window;
+    m_window = NULL;
+    m_isActive = false;
+
+    // The views stay: the root view is taken out of the window first. Quit()
+    // waits for the looper thread, which never waits for this one.
+    if ( window->Lock() )
+    {
+        m_view->RemoveSelf();
+        window->Quit();
+    }
+
+    wxHAIKU_TRACE("unrealized tlw=%u (%s)", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str());
+
+    return true;
+}
+
+/* static */
+void wxNonOwnedWindow::HaikuReleaseHiddenWindows()
+{
+    if ( gs_hiddenRealized.empty() )
+        return;
+
+    // not more often than every second
+    static wxLongLong s_lastRun = 0;
+    const wxLongLong now = wxGetLocalTimeMillis();
+    if ( now - s_lastRun < 1000 )
+        return;
+    s_lastRun = now;
+
+    const long delay = HiddenWindowDelay();
+
+    std::vector<wxUint32> keep;
+    for ( size_t n = 0; n < gs_hiddenRealized.size(); n++ )
+    {
+        wxNonOwnedWindow * const win = dynamic_cast<wxNonOwnedWindow *>(
+                HaikuFindByHandle(gs_hiddenRealized[n]));
+        if ( !win || !win->m_window || win->IsShown() )
+            continue;
+
+        if ( now - win->m_hiddenSince < delay )
+        {
+            keep.push_back(gs_hiddenRealized[n]);
+            continue;
+        }
+
+        // (if it cannot do without its window now it is not asked again
+        // before it is shown and hidden once more)
+        win->HaikuUnrealize();
+    }
+
+    gs_hiddenRealized.swap(keep);
 }
 
 void wxNonOwnedWindow::Raise()
@@ -1075,7 +1375,7 @@ void wxNonOwnedWindow::HaikuHandleEvent(const wxHaikuEvent& event)
                           event.rect.Width() + 1, event.rect.Height() + 1,
                           (int)event.value, (int)m_frameSerial);
 
-            if ( event.value >= m_frameSerial )
+            if ( m_window && event.value >= m_frameSerial )
                 HaikuFrameChanged(wxFromHaikuRect(event.rect));
             break;
 

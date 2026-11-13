@@ -52,8 +52,11 @@ public:
     // implement base class (pure) virtual methods
     // -------------------------------------------
 
-    virtual void SetLabel(const wxString& WXUNUSED(label)) wxOVERRIDE {}
-    virtual wxString GetLabel() const wxOVERRIDE { return wxString(); }
+    // a plain window shows no label but keeps it, as in the other ports:
+    // custom controls store their text there
+    virtual void SetLabel(const wxString& label) wxOVERRIDE
+        { m_windowLabel = label; }
+    virtual wxString GetLabel() const wxOVERRIDE { return m_windowLabel; }
 
     virtual void Raise() wxOVERRIDE;
     virtual void Lower() wxOVERRIDE;
@@ -223,7 +226,11 @@ protected:
     bool m_viewShown;
     bool m_acceptsFiles;
 
+    // SetLabel() of a window which is not a control
+    wxString m_windowLabel;
+
     friend class wxNonOwnedWindow;
+    friend void wxHaikuWindowRealized(wxNonOwnedWindow *tlw);
     friend class wxHaikuPaintSession;
 
     wxDECLARE_DYNAMIC_CLASS(wxWindowHaiku);

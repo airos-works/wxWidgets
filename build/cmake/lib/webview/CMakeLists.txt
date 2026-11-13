@@ -47,6 +47,9 @@ elseif(WXHAIKU)
     # common code plus the place where a backend plugs in: see
     # src/haiku/webview_haiku.cpp
     wx_append_sources(WEBVIEW_FILES WEBVIEW_HAIKU)
+    if(wxUSE_WEBVIEW_SUMMIT)
+        wx_append_sources(WEBVIEW_FILES WEBVIEW_HAIKU_SUMMIT)
+    endif()
 endif()
 
 wx_add_library(wxwebview ${WEBVIEW_FILES})
@@ -61,6 +64,18 @@ endif()
 
 if(APPLE)
     wx_lib_link_libraries(wxwebview PUBLIC "-framework WebKit")
+elseif(WXHAIKU AND wxUSE_WEBVIEW_SUMMIT)
+    # The engine's headers are C++17 and stay out of wx's public headers:
+    # only the backend sources see them.
+    wx_lib_include_directories(wxwebview PRIVATE ${SUMMIT_WEBKIT_INCLUDE_DIR})
+    # libWebKit.so is not in the library path: the summit_webkit package
+    # keeps the engine in /boot/system/lib/summit-webkit. Applications
+    # linking (static) wx need the same -rpath; wx-config --libs webview
+    # carries it.
+    wx_lib_link_libraries(wxwebview PUBLIC
+        ${SUMMIT_WEBKIT_LIBRARY}
+        "-Wl,-rpath-link,${SUMMIT_WEBKIT_LIBRARY_DIR}"
+        "-Wl,-rpath,/boot/system/lib/summit-webkit/lib:/boot/system/lib/summit-webkit:/boot/home/config/non-packaged/lib/summit-webkit/lib")
 elseif(WXMSW)
     if(wxUSE_WEBVIEW_EDGE)
         # Update the following variables if updating WebView2 SDK

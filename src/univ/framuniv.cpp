@@ -86,6 +86,23 @@ void wxFrame::OnSize(wxSizeEvent& event)
     event.Skip();
 }
 
+#ifdef __WXHAIKU__
+
+void wxFrame::HaikuAfterSizeEvent()
+{
+#if wxUSE_MENUS
+    PositionMenuBar();
+#endif // wxUSE_MENUS
+#if wxUSE_STATUSBAR
+    PositionStatusBar();
+#endif // wxUSE_STATUSBAR
+#if wxUSE_TOOLBAR
+    PositionToolBar();
+#endif // wxUSE_TOOLBAR
+}
+
+#endif // __WXHAIKU__
+
 #if wxUSE_MENUS
 
 void wxFrame::PositionMenuBar()

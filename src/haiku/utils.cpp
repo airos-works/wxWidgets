@@ -227,6 +227,64 @@ wxMouseState wxGetMouseState()
     return state;
 }
 
+namespace
+{
+
+// The key of the key map which produces the ASCII character without
+// modifiers or with Shift (letters: in either case), -1 if there is none.
+// The table is made once: the key map rarely changes while we run.
+int KeyCodeOfCharacter(char c)
+{
+    static signed short s_codes[128];
+    static bool s_init = false;
+    if ( !s_init )
+    {
+        s_init = true;
+        for ( size_t n = 0; n < WXSIZEOF(s_codes); n++ )
+            s_codes[n] = -1;
+
+        key_map *map = NULL;
+        char *chars = NULL;
+        get_key_map(&map, &chars);
+        if ( map && chars )
+        {
+            // the shifted table first, so that the unshifted one wins
+            const int32 *tables[] = { map->shift_map, map->normal_map };
+            for ( size_t t = 0; t < WXSIZEOF(tables); t++ )
+            {
+                for ( int code = 0; code < 128; code++ )
+                {
+                    const int32 offset = tables[t][code];
+                    if ( offset < 0 )
+                        continue;
+
+                    // length byte, then the UTF-8 bytes
+                    if ( chars[offset] != 1 )
+                        continue;
+
+                    const unsigned char ch = chars[offset + 1];
+                    if ( ch > 0x20 && ch < 0x7f )
+                    {
+                        s_codes[ch] = code;
+                        if ( isalpha(ch) )
+                        {
+                            s_codes[toupper(ch)] = code;
+                            s_codes[tolower(ch)] = code;
+                        }
+                    }
+                }
+            }
+        }
+
+        free(map);
+        free(chars);
+    }
+
+    return (unsigned char)c < WXSIZEOF(s_codes) ? s_codes[(unsigned char)c] : -1;
+}
+
+} // anonymous namespace
+
 bool wxGetKeyState(wxKeyCode key)
 {
     wxASSERT_MSG( key != WXK_LBUTTON && key != WXK_RBUTTON && key != WXK_MBUTTON,
@@ -284,7 +342,12 @@ bool wxGetKeyState(wxKeyCode key)
         default:
             if ( key >= WXK_F1 && key <= WXK_F12 )
                 code = 0x02 + (key - WXK_F1);
+            else if ( key > 0x20 && key < 0x7f )
+                code = KeyCodeOfCharacter((char)key);
             else
+                return false;
+
+            if ( code < 0 )
                 return false;
     }
 
