@@ -48,12 +48,22 @@ if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.nin
 		-DwxUSE_LIBPNG=sys -DwxUSE_LIBJPEG=sys -DwxUSE_LIBTIFF=sys \
 		-DwxUSE_STC=OFF \
 		-DwxUSE_PRIVATE_FONTS=ON \
+		-DwxUSE_GRAPHICS_CONTEXT=ON \
 		${WX_CMAKE_ARGS:-}
 fi
 
 if [[ $# -gt 0 ]]; then
 	exec ninja -C "$BUILD" -j"$JOBS" "$@"
 fi
-ninja -C "$BUILD" -j"$JOBS"
-cmake --install "$BUILD" > "$BUILD/install.log"
+# the libraries and wxrc, not the samples the tree may be configured with
+mapfile -t LIBTARGETS < <(ninja -C "$BUILD" -t targets all |
+	sed -n 's/^\(wx[a-z]*\): phony$/\1/p')
+ninja -C "$BUILD" -j"$JOBS" "${LIBTARGETS[@]}"
+# Others build against the prefix while we work: it is replaced in one step
+# and only when the whole build passed.
+rm -rf "$PREFIX.new" "$PREFIX.old"
+cmake --install "$BUILD" --prefix "$PREFIX.new" > "$BUILD/install.log"
+[[ ! -e $PREFIX ]] || mv "$PREFIX" "$PREFIX.old"
+mv "$PREFIX.new" "$PREFIX"
+rm -rf "$PREFIX.old"
 echo "installed to $PREFIX ($("$PREFIX/bin/wx-config" --version 2>/dev/null || echo 'no wx-config'))"

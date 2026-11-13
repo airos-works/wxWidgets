@@ -18,6 +18,8 @@
 #include "wx/haiku/dcclient.h"
 #include "wx/haiku/private.h"
 
+#include <AffineTransform.h>
+
 // ============================================================================
 // paint buffers
 // ============================================================================
@@ -151,6 +153,11 @@ wxHaikuPaintSession::wxHaikuPaintSession(wxWindowHaiku *win,
     if ( m_bitmap->Lock() )
     {
         buffer.view->m_stateOwner = NULL;
+        if ( buffer.view->m_transformed )
+        {
+            m_view->SetTransform(BAffineTransform());
+            buffer.view->m_transformed = false;
+        }
 
         wxColour bg = win->GetBackgroundColour();
         if ( !bg.IsOk() )
@@ -180,13 +187,22 @@ wxHaikuPaintSession::~wxHaikuPaintSession()
         m_view->Sync();
         m_bitmap->Unlock();
 
+        wxHaikuViewSynced(m_view);
+
         wxHaikuViewLock lock(target);
         if ( lock.IsLocked() )
         {
             wxHaikuDrawView * const
                 view = dynamic_cast<wxHaikuDrawView *>(target);
             if ( view )
+            {
                 view->m_stateOwner = NULL;
+                if ( view->m_transformed )
+                {
+                    target->SetTransform(BAffineTransform());
+                    view->m_transformed = false;
+                }
+            }
 
             BRegion clip;
             if ( m_region.GetHaikuRegion() )

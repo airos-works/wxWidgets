@@ -18,6 +18,7 @@
 #include "wx/haiku/dc.h"
 #include "wx/haiku/private.h"
 
+#include <AffineTransform.h>
 #include <GradientLinear.h>
 #include <GradientRadial.h>
 #include <Polygon.h>
@@ -203,7 +204,16 @@ bool wxHaikuDCImpl::HaikuBeginRawDraw(bool applyClip)
     if ( !view || view->m_stateOwner != this )
     {
         if ( view )
+        {
             view->m_stateOwner = this;
+
+            if ( view->m_transformed )
+            {
+                m_view->SetTransform(BAffineTransform());
+                view->m_transformed = false;
+            }
+        }
+
         m_clipDirty = true;
     }
 
@@ -808,6 +818,7 @@ void wxHaikuDCImpl::DoDrawRectangle(wxCoord x, wxCoord y,
 
                 m_view->DrawTiledBitmapAsync(stipple->GetHaikuDrawBitmap(true),
                                              rect, BPoint(0, 0));
+                wxHaikuBitmapDrawn(m_view, *stipple);
             }
         }
         else
@@ -1041,7 +1052,31 @@ void wxHaikuDCImpl::DoGradientFillConcentric(const wxRect& rect,
 
 void wxHaikuDCImpl::DoDrawText(const wxString& text, wxCoord x, wxCoord y)
 {
-    DoDrawRotatedText(text, x, y, 0);
+    if ( text.find(wxS('\n')) == wxString::npos )
+    {
+        DoDrawRotatedText(text, x, y, 0);
+        return;
+    }
+
+    // one line below the other, as the ports whose text engine handles the
+    // line breaks do it
+    const int lineHeight = GetCharHeight();
+    size_t start = 0;
+    for ( ;; )
+    {
+        const size_t end = text.find(wxS('\n'), start);
+        const wxString line = text.substr(start, end == wxString::npos
+                                                    ? wxString::npos
+                                                    : end - start);
+        if ( !line.empty() )
+            DoDrawRotatedText(line, x, y, 0);
+
+        if ( end == wxString::npos )
+            break;
+
+        start = end + 1;
+        y += lineHeight;
+    }
 }
 
 void wxHaikuDCImpl::DoDrawRotatedText(const wxString& text,
@@ -1157,9 +1192,12 @@ void wxHaikuDCImpl::DoDrawRotatedText(const wxString& text,
 // bitmaps
 // ----------------------------------------------------------------------------
 
-void wxHaikuDCImpl::HaikuDrawBitmapPart(BBitmap *bitmap, bool blend,
+void wxHaikuDCImpl::HaikuDrawBitmapPart(const wxBitmap& bmp, bool useMask,
                                         const wxRect& src, const wxRect& dst)
 {
+    BBitmap * const bitmap = bmp.GetHaikuDrawBitmap(useMask);
+    const bool blend = bmp.HaikuNeedsAlphaBlend(useMask);
+
     if ( !bitmap || src.IsEmpty() || dst.IsEmpty() )
         return;
 
@@ -1188,6 +1226,9 @@ void wxHaikuDCImpl::HaikuDrawBitmapPart(BBitmap *bitmap, bool blend,
     else
         m_view->DrawBitmapAsync(bitmap, s, d);
 
+    // the native bitmap must not be deleted before this was executed
+    wxHaikuBitmapDrawn(m_view, bmp);
+
     HaikuEnd();
 }
 
@@ -1210,8 +1251,7 @@ void wxHaikuDCImpl::DoDrawBitmap(const wxBitmap& bmp, wxCoord x, wxCoord y,
         toDraw = HaikuColouriseMono(bmp);
     }
 
-    HaikuDrawBitmapPart(toDraw.GetHaikuDrawBitmap(useMask),
-                        toDraw.HaikuNeedsAlphaBlend(useMask),
+    HaikuDrawBitmapPart(toDraw, useMask,
                         wxRect(0, 0, w, h),
                         wxRect(XV(x), YV(y), WV(w), HV(h)));
 
@@ -1328,9 +1368,7 @@ bool wxHaikuDCImpl::DoStretchBlit(wxCoord xdest, wxCoord ydest,
     const wxRasterOperationMode oldRop = m_logicalFunction;
     m_logicalFunction = rop;
 
-    HaikuDrawBitmapPart(bitmap->GetHaikuDrawBitmap(useMask),
-                        bitmap->HaikuNeedsAlphaBlend(useMask),
-                        src, dst);
+    HaikuDrawBitmapPart(*bitmap, useMask, src, dst);
 
     m_logicalFunction = oldRop;
 

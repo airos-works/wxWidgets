@@ -2298,6 +2298,7 @@ set(HAIKU_LOWLEVEL_SRC
     src/haiku/dnd.cpp
     src/haiku/evtloop.cpp
     src/haiku/font.cpp
+    src/haiku/graphics.cpp
     src/haiku/looper.cpp
     src/haiku/nonownedwnd.cpp
     src/haiku/pen.cpp

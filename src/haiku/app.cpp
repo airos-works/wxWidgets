@@ -291,8 +291,10 @@ void wxApp::CleanUp()
 {
     wxAppBase::CleanUp();
 
+    wxHaikuSyncPendingDraws();
     wxHaikuFreePaintBuffers();
     wxHaikuFreeBitmapViews();
+    wxHaikuSyncPendingDraws();
 
     StopApplicationThread();
 }
@@ -315,6 +317,9 @@ bool wxApp::ProcessIdle()
 
     // idle handlers usually update the UI: show it now
     wxHaikuPaintPendingWindows();
+
+    // bitmaps drawn directly on windows or on other bitmaps
+    wxHaikuSyncPendingDraws();
 
     return needMore;
 }

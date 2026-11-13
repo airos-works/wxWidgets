@@ -1196,12 +1196,12 @@ void wxWindowHaiku::HaikuApplyCursor()
 
     if ( native )
     {
-        m_view->SetViewCursor(native, false);
+        m_view->SetViewCursor(native, true);
     }
     else
     {
         BCursor standard(B_CURSOR_ID_SYSTEM_DEFAULT);
-        m_view->SetViewCursor(&standard, false);
+        m_view->SetViewCursor(&standard, true);
     }
 }
 
@@ -1243,12 +1243,12 @@ static void wxHaikuApplyCursorRecursively(wxWindowHaiku *win)
         {
             if ( native )
             {
-                view->SetViewCursor(native, false);
+                view->SetViewCursor(native, true);
             }
             else
             {
                 BCursor standard(B_CURSOR_ID_SYSTEM_DEFAULT);
-                view->SetViewCursor(&standard, false);
+                view->SetViewCursor(&standard, true);
             }
         }
     }
