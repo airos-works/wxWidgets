@@ -288,6 +288,7 @@ void wxNonOwnedWindow::Init()
     m_isActive = false;
     m_windowShown = false;
     m_sizeEventSent = false;
+    m_shownOnce = false;
 
     m_isShown = false;
 }
@@ -697,9 +698,12 @@ bool wxNonOwnedWindow::Show(bool show)
     if ( !m_window )
         return true;
 
-    if ( show && !m_sizeEventSent )
+    if ( show && !m_shownOnce )
     {
-        // the first size event: lays out the window before it appears
+        // A size event before the window appears for the first time: the
+        // children created since the window itself got its size are laid
+        // out by it.
+        m_shownOnce = true;
         m_sizeEventSent = true;
 
         wxSizeEvent event(GetSize(), GetId());
@@ -714,6 +718,9 @@ bool wxNonOwnedWindow::Show(bool show)
         if ( focus && focus->GetTLW() == this )
             wxHaikuKillFocus();
     }
+
+    wxHAIKU_TRACE("%s tlw=%u (%s)", show ? "show" : "hide", (unsigned)m_handle,
+                  (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str());
 
     wxHaikuWindowLock lock(m_window);
     if ( lock.IsLocked() && show != m_windowShown )
@@ -831,6 +838,13 @@ void wxNonOwnedWindow::HaikuHandleKey(const wxHaikuEvent& he)
 
     wxWindow * const win = static_cast<wxWindow *>(target);
     const wxUint32 handle = target->GetHaikuHandle();
+
+    wxHAIKU_TRACE("key %s key=0x%x raw=0x%x bytes=%d:0x%02x mods=0x%x "
+                  "target=%u (%s)",
+                  he.type == wxHAIKU_EVT_KEY_DOWN ? "down" : "up",
+                  (unsigned)he.key, (unsigned)he.rawChar, (int)he.numBytes,
+                  (unsigned)(unsigned char)he.bytes[0], (unsigned)he.modifiers,
+                  (unsigned)handle, (const char *)wxString(win->GetClassInfo()->GetClassName()).utf8_str());
 
     wxKeyEvent event(he.type == wxHAIKU_EVT_KEY_DOWN ? wxEVT_KEY_DOWN
                                                      : wxEVT_KEY_UP);

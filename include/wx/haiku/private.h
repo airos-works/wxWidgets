@@ -35,6 +35,19 @@ class WXDLLIMPEXP_FWD_CORE wxWindowHaiku;
 class WXDLLIMPEXP_FWD_CORE wxNonOwnedWindow;
 class WXDLLIMPEXP_FWD_CORE wxRegion;
 class WXDLLIMPEXP_FWD_CORE wxKeyEvent;
+class WXDLLIMPEXP_FWD_CORE wxBitmap;
+
+// ----------------------------------------------------------------------------
+// tracing
+// ----------------------------------------------------------------------------
+
+// Set WXHAIKU_TRACE=1 in the environment to get the input and window events
+// the port handles on stderr.
+extern bool wxHaikuTraceEnabled;
+void wxHaikuTracePrintf(const char *format, ...);
+
+#define wxHAIKU_TRACE(...) \
+    do { if ( wxHaikuTraceEnabled ) wxHaikuTracePrintf(__VA_ARGS__); } while ( 0 )
 
 // ----------------------------------------------------------------------------
 // conversions
@@ -92,30 +105,32 @@ class wxHaikuViewLock
 {
 public:
     explicit wxHaikuViewLock(BView *view)
-        : m_view(view), m_locked(false)
+        : m_view(view), m_looper(NULL)
     {
-        if ( m_view && m_view->Window() )
-            m_locked = m_view->LockLooper();
+        // The looper is remembered: the view may be removed from its window
+        // while the lock is held (RemoveSelf()).
+        if ( m_view && m_view->Window() && m_view->LockLooper() )
+            m_looper = m_view->Looper();
     }
 
     ~wxHaikuViewLock()
     {
-        if ( m_locked )
-            m_view->UnlockLooper();
+        if ( m_looper )
+            m_looper->Unlock();
     }
 
     // the view is attached to a window and its looper is locked
-    bool IsLocked() const { return m_locked; }
+    bool IsLocked() const { return m_looper != NULL; }
 
     // the view may be manipulated: it is locked or not attached at all
     bool CanTouch() const
     {
-        return m_view && (m_locked || !m_view->Window());
+        return m_view && (m_looper || !m_view->Window());
     }
 
 private:
     BView *m_view;
-    bool m_locked;
+    BLooper *m_looper;
 
     wxDECLARE_NO_COPY_CLASS(wxHaikuViewLock);
 };
@@ -293,12 +308,38 @@ public:
     wxHaikuDrawView(BRect frame, const char *name, uint32 resizingMode,
                     uint32 flags)
         : BView(frame, name, resizingMode, flags),
-          m_stateOwner(NULL)
+          m_stateOwner(NULL),
+          m_transformed(false)
     {
     }
 
+    virtual ~wxHaikuDrawView();
+
     const void *m_stateOwner;
+
+    // a graphics context left an affine transformation on the view: who
+    // takes the view over resets it
+    bool m_transformed;
 };
+
+// Drawing is asynchronous: a DrawBitmap() sits in the buffer of the window's
+// connection until it is flushed and is executed by app_server some time
+// later, while deleting a BBitmap takes effect at once. A bitmap which was
+// drawn and is destroyed right away (temporaries are common in wx code)
+// would not be drawn at all. So the views with bitmap drawing under way are
+// remembered and the native bitmaps of destroyed wxBitmaps are kept until
+// these views have been synchronized, which happens at the end of a paint
+// anyway and otherwise in idle time.
+
+// to be called when the bitmap is drawn on the view (wx thread)
+void wxHaikuBitmapDrawn(BView *target, const wxBitmap& bitmap);
+
+// to be called after view->Sync() (wx thread)
+void wxHaikuViewSynced(BView *view);
+
+// synchronizes all views with bitmap drawing under way and frees the
+// native bitmaps waiting for it
+void wxHaikuSyncPendingDraws();
 
 // Helpers for the hooks of views which stand for a wxWindow: they only build
 // event records, they never touch wx objects.
@@ -354,6 +395,10 @@ private:
 // Posted by the wx thread to its BWindows after it moved or resized them:
 // answered with a wxHAIKU_EVT_FRAME record with the flag set.
 const uint32 wxHAIKU_MSG_FRAME_SYNC = 'wxFS';
+
+// Sent by the wx thread to a view which got the wx focus: the looper thread
+// makes it the focus view of its window.
+const uint32 wxHAIKU_MSG_MAKE_FOCUS = 'wxMF';
 
 // private window feel of menus and tool tips: above everything, all
 // workspaces, never the active window (see headers/private/interface)

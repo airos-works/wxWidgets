@@ -44,10 +44,12 @@ else()
         )
 
     install(DIRECTORY DESTINATION "bin")
+    # a relative link, at the place the files are really installed to
+    # (cmake --install --prefix, DESTDIR): the tree can be staged and moved
     install(CODE "execute_process( \
         COMMAND ${CMAKE_COMMAND} -E create_symlink \
-        ${CMAKE_INSTALL_PREFIX}/lib/wx/config/${wxBUILD_FILE_ID} \
-        ${CMAKE_INSTALL_PREFIX}/bin/wx-config \
+        ../lib/wx/config/${wxBUILD_FILE_ID} \
+        \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/wx-config \
         )"
     )
 endif()

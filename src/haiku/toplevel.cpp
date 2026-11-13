@@ -314,6 +314,10 @@ bool wxTopLevelWindowHaiku::EnableCloseButton(bool enable)
 
 void wxTopLevelWindowHaiku::HaikuActivated(bool active)
 {
+    wxHAIKU_TRACE("activate %d tlw=%u (%s) was=%d", (int)active,
+                  (unsigned)m_handle, (const char *)wxString(GetClassInfo()->GetClassName()).utf8_str(),
+                  (int)m_isActive);
+
     if ( active == m_isActive )
         return;
 

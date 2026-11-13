@@ -34,14 +34,14 @@ if(wxUSE_XRC)
     if(NOT MSVC)
         install(CODE "execute_process( \
             COMMAND ${CMAKE_COMMAND} -E rename \
-            ${CMAKE_INSTALL_PREFIX}/bin/wxrc${EXE_SUFFIX} \
-            ${CMAKE_INSTALL_PREFIX}/bin/wxrc-${wxMAJOR_VERSION}.${wxMINOR_VERSION}${EXE_SUFFIX} \
+            \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/wxrc${EXE_SUFFIX} \
+            \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/wxrc-${wxMAJOR_VERSION}.${wxMINOR_VERSION}${EXE_SUFFIX} \
             )"
         )
         install(CODE "execute_process( \
             COMMAND ${CMAKE_COMMAND} -E create_symlink \
-            ${CMAKE_INSTALL_PREFIX}/bin/wxrc-${wxMAJOR_VERSION}.${wxMINOR_VERSION}${EXE_SUFFIX} \
-            ${CMAKE_INSTALL_PREFIX}/bin/wxrc${EXE_SUFFIX} \
+            wxrc-${wxMAJOR_VERSION}.${wxMINOR_VERSION}${EXE_SUFFIX} \
+            \$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}/bin/wxrc${EXE_SUFFIX} \
             )"
         )
     endif()

@@ -62,4 +62,54 @@ private:
     wxDECLARE_DYNAMIC_CLASS(wxToggleButton);
 };
 
+// ----------------------------------------------------------------------------
+// wxBitmapToggleButton: a toggle button showing a bitmap per state
+// ----------------------------------------------------------------------------
+
+class WXDLLIMPEXP_CORE wxBitmapToggleButton : public wxToggleButton
+{
+public:
+    wxBitmapToggleButton() { }
+
+    wxBitmapToggleButton(wxWindow *parent,
+                         wxWindowID id,
+                         const wxBitmap& label,
+                         const wxPoint& pos = wxDefaultPosition,
+                         const wxSize& size = wxDefaultSize,
+                         long style = 0,
+                         const wxValidator& validator = wxDefaultValidator,
+                         const wxString& name = wxASCII_STR(wxCheckBoxNameStr))
+    {
+        Create(parent, id, label, pos, size, style, validator, name);
+    }
+
+    bool Create(wxWindow *parent,
+                wxWindowID id,
+                const wxBitmap& label,
+                const wxPoint& pos = wxDefaultPosition,
+                const wxSize& size = wxDefaultSize,
+                long style = 0,
+                const wxValidator& validator = wxDefaultValidator,
+                const wxString& name = wxASCII_STR(wxCheckBoxNameStr));
+
+    // without a border the bitmap is the whole control and the parent shows
+    // through its transparent parts
+    virtual bool HasTransparentBackground() wxOVERRIDE
+        { return HasFlag(wxBORDER_NONE); }
+
+protected:
+    virtual wxBitmap DoGetBitmap(State which) const wxOVERRIDE
+        { return m_bitmaps[which]; }
+    virtual void DoSetBitmap(const wxBitmap& bitmap, State which) wxOVERRIDE;
+
+    virtual wxSize DoGetBestClientSize() const wxOVERRIDE;
+    virtual bool DoDrawBackground(wxDC& dc) wxOVERRIDE;
+    virtual void DoDraw(wxControlRenderer *renderer) wxOVERRIDE;
+
+private:
+    wxBitmap m_bitmaps[State_Max];
+
+    wxDECLARE_DYNAMIC_CLASS(wxBitmapToggleButton);
+};
+
 #endif // _WX_UNIV_TGLBTN_H_
