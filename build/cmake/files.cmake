@@ -2341,6 +2341,19 @@ set(HAIKU_LOWLEVEL_HDR
     wx/haiku/window.h
 )
 
+# The parts of the Haiku port which are not needed to get a window on the
+# screen: native dialogs, system integration, placeholders.
+set(HAIKU_SRC
+    src/haiku/dirdlg.cpp
+    src/haiku/filedlg.cpp
+    src/haiku/filepanel.cpp
+)
+
+set(HAIKU_HDR
+    wx/haiku/dirdlg.h
+    wx/haiku/filedlg.h
+)
+
 set(OSX_LOWLEVEL_SRC
     # Shared wxMac and wxCocoa files
     #TODO:     <if cond="PLATFORM_MACOSX=='1'">

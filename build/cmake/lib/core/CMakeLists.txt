@@ -58,6 +58,7 @@ elseif(WXQT)
 elseif(WXHAIKU)
     # the low level layer on the Be API, the controls are wxUniversal's
     wx_append_sources(CORE_SRC HAIKU_LOWLEVEL)
+    wx_append_sources(CORE_SRC HAIKU)
     wx_append_sources(CORE_SRC UNIV)
     wx_append_sources(CORE_SRC UNIV_THEMES)
 endif()

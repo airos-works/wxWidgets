@@ -20,7 +20,8 @@
 
 // this symbol is defined for the platforms which support multiple
 // ('|'-separated) filters in the file dialog
-#if defined(__WXMSW__) || defined(__WXGTK__) || defined(__WXMAC__)
+#if defined(__WXMSW__) || defined(__WXGTK__) || defined(__WXMAC__) || \
+    defined(__WXHAIKU__)
     #define wxHAS_MULTIPLE_FILEDLG_FILTERS
 #endif
 
@@ -235,7 +236,11 @@ wxSaveFileSelector(const wxString& what,
                    wxWindow *parent = NULL);
 
 
-#if defined (__WXUNIVERSAL__)
+#if defined(__WXHAIKU__)
+    // the system's file panel; wxGenericFileDialog remains available from
+    // wx/generic/filedlgg.h
+    #include "wx/haiku/filedlg.h"
+#elif defined (__WXUNIVERSAL__)
     #define wxHAS_GENERIC_FILEDIALOG
     #include "wx/generic/filedlgg.h"
 #elif defined(__WXMSW__)
