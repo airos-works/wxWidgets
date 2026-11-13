@@ -84,10 +84,19 @@
 
 #include "wx/haiku/private/webview.h"
 
+#if wxUSE_WEBVIEW_SUMMIT
+    #include "wx/haiku/webview_summit.h"
+#endif
+
 wxWebViewFactory *wxHaikuCreateDefaultWebViewFactory()
 {
-    // PLACEHOLDER: no backend
+#if wxUSE_WEBVIEW_SUMMIT
+    // air/OS' WebKit: registered as wxWebViewBackendWebKit, the default
+    return new wxWebViewFactorySummit;
+#else
+    // the library was built without a backend
     return NULL;
+#endif
 }
 
 #endif // wxUSE_WEBVIEW

@@ -348,6 +348,8 @@
 
 #cmakedefine01 wxUSE_WEBVIEW_EDGE
 
+#cmakedefine01 wxUSE_WEBVIEW_SUMMIT
+
 #if (defined(__WXGTK__) && !defined(__WXGTK3__)) || defined(__WXOSX__)
 #cmakedefine01 wxUSE_WEBVIEW_WEBKIT
 #else

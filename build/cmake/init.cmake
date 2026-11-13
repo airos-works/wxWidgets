@@ -506,6 +506,28 @@ if(wxUSE_GUI)
             # plugs in at run time (src/haiku/webview_haiku.cpp)
             set(wxUSE_WEBVIEW_WEBKIT OFF)
             set(wxUSE_WEBVIEW_WEBKIT2 OFF)
+            # air/OS: the summit_webkit package (WebKit2, BWebKitView). Its
+            # headers are in develop/headers/summit-webkit and its libraries
+            # in lib/summit-webkit/lib of a system directory; for a cross
+            # build point SUMMIT_WEBKIT_ROOT at the staged package
+            # (/data1/airos/deps/<arch>/boot/system). Without it the webview
+            # library is built without any backend.
+            if(wxUSE_WEBVIEW_SUMMIT)
+                find_path(SUMMIT_WEBKIT_INCLUDE_DIR WebKit/WebKitView.h
+                    HINTS ${SUMMIT_WEBKIT_ROOT} /boot/system
+                    PATH_SUFFIXES develop/headers/summit-webkit
+                    NO_CMAKE_FIND_ROOT_PATH)
+                find_library(SUMMIT_WEBKIT_LIBRARY NAMES WebKit
+                    HINTS ${SUMMIT_WEBKIT_ROOT} /boot/system
+                    PATH_SUFFIXES lib/summit-webkit/lib
+                    NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH)
+                if(SUMMIT_WEBKIT_INCLUDE_DIR AND SUMMIT_WEBKIT_LIBRARY)
+                    get_filename_component(SUMMIT_WEBKIT_LIBRARY_DIR ${SUMMIT_WEBKIT_LIBRARY} DIRECTORY)
+                else()
+                    message(WARNING "summit_webkit not found, wxWebView will have no backend")
+                    wx_option_force_value(wxUSE_WEBVIEW_SUMMIT OFF)
+                endif()
+            endif()
         endif()
     endif()
 

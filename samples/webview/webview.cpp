@@ -18,7 +18,8 @@
     #include "wx/wx.h"
 #endif
 
-#if !wxUSE_WEBVIEW_WEBKIT && !wxUSE_WEBVIEW_WEBKIT2 && !wxUSE_WEBVIEW_IE && !wxUSE_WEBVIEW_EDGE
+#if !wxUSE_WEBVIEW_WEBKIT && !wxUSE_WEBVIEW_WEBKIT2 && !wxUSE_WEBVIEW_IE && !wxUSE_WEBVIEW_EDGE \
+    && !wxUSE_WEBVIEW_SUMMIT
 #error "A wxWebView backend is required by this sample"
 #endif
 
@@ -52,7 +53,7 @@
 #include "wx/textctrl.h"
 #endif
 
-#if defined(__WXMSW__) || defined(__WXOSX__)
+#if defined(__WXMSW__) || defined(__WXOSX__) || defined(__WXHAIKU__)
 #include "stop.xpm"
 #include "refresh.xpm"
 #endif

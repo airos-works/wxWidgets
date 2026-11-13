@@ -2978,6 +2978,17 @@ set(WEBVIEW_HAIKU_SRC
     src/haiku/webview_haiku.cpp
 )
 
+# the summit_webkit backend (wxUSE_WEBVIEW_SUMMIT)
+set(WEBVIEW_HAIKU_SUMMIT_HDR
+    wx/haiku/webview_summit.h
+    wx/haiku/private/summitwebbackend.h
+)
+
+set(WEBVIEW_HAIKU_SUMMIT_SRC
+    src/haiku/webview_summit.cpp
+    src/haiku/summitwebbackend.cpp
+)
+
 set(WEBVIEW_WEBKIT2_EXTENSION_SRC
     src/gtk/webview_webkit2_extension.cpp
 )
