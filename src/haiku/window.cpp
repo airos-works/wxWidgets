@@ -1009,19 +1009,27 @@ void wxWindowHaiku::DoSetSize(int x, int y, int width, int height, int sizeFlags
         }
     }
 
-    const int maxWidth = GetMaxWidth(),
-              minWidth = GetMinWidth(),
-              maxHeight = GetMaxHeight(),
-              minHeight = GetMinHeight();
+    // The size limits constrain top level windows only. A child gets the
+    // size it is given, as in wxMSW and wxOSX, which BambuStudio is made on:
+    // sizers respect the minimal size themselves, and its widgets lay out
+    // their parts by hand below the parts' minimal sizes (the inc/dec
+    // buttons of SpinInput, the text control of TextInput).
+    if ( IsTopLevel() )
+    {
+        const int maxWidth = GetMaxWidth(),
+                  minWidth = GetMinWidth(),
+                  maxHeight = GetMaxHeight(),
+                  minHeight = GetMinHeight();
 
-    if ( minWidth != wxDefaultCoord && width < minWidth )
-        width = minWidth;
-    if ( maxWidth != wxDefaultCoord && width > maxWidth )
-        width = maxWidth;
-    if ( minHeight != wxDefaultCoord && height < minHeight )
-        height = minHeight;
-    if ( maxHeight != wxDefaultCoord && height > maxHeight )
-        height = maxHeight;
+        if ( minWidth != wxDefaultCoord && width < minWidth )
+            width = minWidth;
+        if ( maxWidth != wxDefaultCoord && width > maxWidth )
+            width = maxWidth;
+        if ( minHeight != wxDefaultCoord && height < minHeight )
+            height = minHeight;
+        if ( maxHeight != wxDefaultCoord && height > maxHeight )
+            height = maxHeight;
+    }
 
     if ( width < 0 )
         width = 0;
