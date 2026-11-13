@@ -2384,7 +2384,16 @@ wxSize wxTextCtrl::DoGetBestClientSize() const
     int wChar = GetAverageWidth(),
         hChar = GetLineHeight();
 
+#ifdef __WXHAIKU__
+    // A single line control is as wide as wxGTK's (DoGetSizeFromTextSize(80)
+    // there): BambuStudio's number fields make the best size of their text
+    // control its minimal size and then size it by hand, leaving room for
+    // the unit after it; with 100 pixels the unit was pushed out of the field
+    // (all ports but wxMSW hold windows to their minimal size).
+    int widthMin = IsSingleLine() ? 80 : wxMax(10*wChar, 100);
+#else
     int widthMin = wxMax(10*wChar, 100);
+#endif
     if ( w < widthMin )
         w = widthMin;
     if ( h < hChar )

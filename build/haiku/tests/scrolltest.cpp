@@ -7,7 +7,9 @@
 //   scrolltest --bambu    BambuStudio's parameter page: wxVSCROLL only,
 //                         SetScrollbars(1, 20, 1, 2), rows of a label and a
 //                         self-drawn field of fixed width with its unit
-//                         inside, added late between Freeze() and Thaw()
+//                         inside, added late between Freeze() and Thaw();
+//                         the text control is made narrower than its best
+//                         (= minimal) size as BambuStudio's TextInput does
 #include "wx/wx.h"
 
 #include <stdio.h>
@@ -157,11 +159,15 @@ public:
                        rect.GetRight() < client.x ? "fits" : "CUT");
                 if ( Field * const field = dynamic_cast<Field *>(last) )
                 {
-                    printf("text control of the field: asked %d wide, is %d "
-                           "-> %s\n", field->m_asked,
-                           field->m_text->GetSize().x,
-                           field->m_text->GetSize().x == field->m_asked
-                                ? "ok" : "WRONG");
+                    // the unit is drawn 5 pixels after the text control
+                    wxClientDC dc(field);
+                    const int unitRight = field->m_text->GetRect().GetRight()
+                                          + 5 + dc.GetTextExtent("mm").x;
+                    printf("text control of the field: asked %d wide, is %d; "
+                           "unit ends at %d of %d -> %s\n", field->m_asked,
+                           field->m_text->GetSize().x, unitRight,
+                           field->GetSize().x,
+                           unitRight < field->GetSize().x ? "ok" : "CUT");
                 }
                 fflush(stdout);
                 delete timer;
