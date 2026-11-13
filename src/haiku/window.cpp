@@ -108,7 +108,7 @@ wxPoint ClientPosFromScreen(wxWindowHaiku *win, const wxPoint& screen)
     return screen - win->HaikuGetScreenOrigin() - win->GetClientAreaOrigin();
 }
 
-void SendMouseEvent(wxWindowHaiku *win, wxEventType type,
+bool SendMouseEvent(wxWindowHaiku *win, wxEventType type,
                     const wxPoint& pos, const wxHaikuEvent& he,
                     int clickCount = -1)
 {
@@ -121,7 +121,7 @@ void SendMouseEvent(wxWindowHaiku *win, wxEventType type,
     event.m_clickCount = clickCount;
     FillMouseState(event, he.buttons, he.modifiers);
 
-    win->HandleWindowEvent(event);
+    return win->HandleWindowEvent(event);
 }
 
 // the pointer is in the given window now (NULL: in none of ours)
@@ -520,10 +520,25 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                     if ( !(released & info.mask) )
                         continue;
 
-                    SendMouseEvent(target, info.up, pos, he, 1);
+                    const bool
+                        processed = SendMouseEvent(target, info.up, pos, he, 1);
 
                     if ( wxWindowHaiku::HaikuFindByHandle(handle) != target )
                         break;
+
+                    // The release of the secondary button asks for the
+                    // context menu if nobody used the event itself, as the
+                    // native ports do; the event goes up to the parents.
+                    if ( info.up == wxEVT_RIGHT_UP && !processed )
+                    {
+                        wxContextMenuEvent
+                            eventMenu(wxEVT_CONTEXT_MENU, target->GetId(), screen);
+                        eventMenu.SetEventObject(target);
+                        target->HandleWindowEvent(eventMenu);
+
+                        if ( wxWindowHaiku::HaikuFindByHandle(handle) != target )
+                            break;
+                    }
                 }
 
                 if ( !he.buttons )

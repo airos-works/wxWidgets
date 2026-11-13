@@ -198,9 +198,6 @@ void DispatchAppEvent(const wxHaikuEvent& event)
                 wxActivateEvent activate(wxEVT_ACTIVATE_APP, event.flag);
                 activate.SetEventObject(app);
                 app->ProcessEvent(activate);
-
-                if ( event.flag )
-                    app->MacReopenApp();
             }
             break;
 
