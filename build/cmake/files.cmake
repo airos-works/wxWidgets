@@ -2292,6 +2292,7 @@ set(HAIKU_LOWLEVEL_SRC
     src/haiku/pen.cpp
     src/haiku/popupwin.cpp
     src/haiku/region.cpp
+    src/haiku/renderer.cpp
     src/haiku/settings.cpp
     src/haiku/tooltip.cpp
     src/haiku/toplevel.cpp
@@ -2320,6 +2321,7 @@ set(HAIKU_LOWLEVEL_HDR
     wx/haiku/dnd.h
     wx/haiku/evtloop.h
     wx/haiku/font.h
+    wx/haiku/look.h
     wx/haiku/nonownedwnd.h
     wx/haiku/pen.h
     wx/haiku/popupwin.h

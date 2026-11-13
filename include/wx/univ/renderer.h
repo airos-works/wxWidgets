@@ -73,6 +73,11 @@ public:
 class WXDLLIMPEXP_CORE wxRenderer : public wxDelegateRendererNative
 {
 public:
+    // the wxRendererNative functions a theme does not implement itself are
+    // those of the native renderer of the port, if it has one (the generic
+    // renderer otherwise)
+    wxRenderer() : wxDelegateRendererNative(wxRendererNative::GetDefault()) { }
+
     // drawing functions
     // -----------------
 
