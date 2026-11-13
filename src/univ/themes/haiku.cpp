@@ -74,6 +74,22 @@ inline wxColour UIColour(color_which which)
     return wxHaikuLook::Colour(which);
 }
 
+// A button without border is a flat one. wxToggleButton has no border in
+// wxUniversal by default (its style then says wxBORDER_NONE as if the
+// application had asked for it): it always is a button.
+bool IsFlatButton(const wxWindow *win)
+{
+    if ( !win || !win->HasFlag(wxBORDER_NONE) )
+        return false;
+
+#if wxUSE_TOGGLEBTN
+    if ( wxDynamicCast(win, wxToggleButton) )
+        return false;
+#endif // wxUSE_TOGGLEBTN
+
+    return true;
+}
+
 // The tint of the control look: lightening tints of a dark colour move a
 // quarter as far in the dark appearance (HaikuControlLook.cpp, _Tint())
 wxColour LookTint(const wxColour& colour, float tint)
@@ -873,7 +889,7 @@ void wxHaikuRenderer::DrawButtonSurface(wxDC& dc,
                                      : UIColour(B_CONTROL_BACKGROUND_COLOR);
 
     // a button without border is a flat surface, darker while pressed
-    if ( win && win->HasFlag(wxBORDER_NONE) )
+    if ( IsFlatButton(win) )
     {
         wxHaikuLook::Fill(dc, rect,
             flags & wxCONTROL_PRESSED ? LookTint(base, B_DARKEN_1_TINT)
@@ -2568,7 +2584,7 @@ void wxHaikuRenderer::AdjustSize(wxSize *size, const wxWindow *window)
                                        0, left, top, right, bottom);
         }
 
-        if ( window->HasFlag(wxBORDER_NONE) )
+        if ( IsFlatButton(window) )
         {
             // a flat button: its contents and a small margin
             size->x += 2*Scaled(2);
