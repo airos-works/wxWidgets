@@ -233,10 +233,11 @@ void wxHaikuView::MessageReceived(BMessage *message)
 // ============================================================================
 
 wxHaikuWindow::wxHaikuWindow(wxUint32 handle, BRect frame, const char *title,
-                             window_look look, window_feel feel, uint32 flags)
+                             window_look look, window_feel feel, uint32 flags,
+                             int32 firstSerial)
     : BWindow(frame, title, look, feel, flags),
       m_handle(handle),
-      m_frameSerial(0)
+      m_frameSerial(firstSerial)
 {
 }
 

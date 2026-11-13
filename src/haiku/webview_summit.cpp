@@ -11,6 +11,7 @@
 #if wxUSE_WEBVIEW && wxUSE_WEBVIEW_SUMMIT
 
 #include "wx/haiku/webview_summit.h"
+#include "wx/nonownedwnd.h"
 
 #ifndef WX_PRECOMP
     #include "wx/app.h"
@@ -178,6 +179,13 @@ bool wxWebViewSummitImpl::EnsureEngine()
     wxWebViewSummit * const win = m_owner;
     BView * const host = win->GetHaikuView();
     if ( !host )
+        return false;
+
+    // The engine's view belongs in a window from the start: the top level
+    // window gets its BWindow now if it has none yet (it is created when
+    // first shown otherwise).
+    wxNonOwnedWindow * const tlw = win->GetTLW();
+    if ( tlw && !tlw->HaikuRealize() )
         return false;
 
     summitweb::Options options;

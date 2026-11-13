@@ -220,9 +220,15 @@ bool wxTopLevelWindowHaiku::ShowFullScreen(bool show, long style)
         HaikuUpdateWindowType();
 
         wxRect screen;
+        if ( m_window )
         {
             wxHaikuWindowLock lock(m_window);
             BScreen bscreen(m_window);
+            screen = wxFromHaikuRect(bscreen.Frame());
+        }
+        else
+        {
+            BScreen bscreen(B_MAIN_SCREEN_ID);
             screen = wxFromHaikuRect(bscreen.Frame());
         }
 
@@ -308,6 +314,14 @@ bool wxTopLevelWindowHaiku::IsIconized() const
 // ----------------------------------------------------------------------------
 // title, icons, attention
 // ----------------------------------------------------------------------------
+
+void wxTopLevelWindowHaiku::HaikuWindowCreated(BWindow *window)
+{
+    wxNonOwnedWindow::HaikuWindowCreated(window);
+
+    // (the window does not run yet: this thread has its lock)
+    window->SetTitle(wxHaikuStr(m_title));
+}
 
 void wxTopLevelWindowHaiku::SetTitle(const wxString& title)
 {

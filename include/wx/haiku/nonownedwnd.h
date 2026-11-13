@@ -13,6 +13,14 @@
 // Common base of wxTopLevelWindow and wxPopupWindow: owns a BWindow (and so a
 // looper thread) whose root view is the view of the wxWindow.
 //
+// The BWindow is created when the window is shown for the first time (or
+// when something needs it, see HaikuRealize()): applications create many
+// windows early which are shown late or never (popups of combo boxes,
+// dialogs kept for later), and each BWindow costs a thread here and one in
+// app_server. Until then the views of the window and its children exist
+// without a window, the geometry is kept on the wx side. Popups hidden for
+// a while give their BWindow back (HaikuUnrealize()).
+//
 // The position and size of the wx window are those of the window including
 // its decorations (tab and border); the client area is the BWindow's frame.
 class WXDLLIMPEXP_CORE wxNonOwnedWindow : public wxNonOwnedWindowBase
@@ -48,7 +56,22 @@ public:
     // implementation from now on
     // --------------------------
 
+    // the BWindow, NULL while there is none (see HaikuRealize())
     BWindow *GetHaikuWindow() const { return m_window; }
+
+    // creates the BWindow if there is none yet; false if that failed
+    bool HaikuRealize();
+
+    // gives the BWindow of a hidden window back, keeping the views; false
+    // if the window has none or cannot do without it now
+    bool HaikuUnrealize();
+
+    // true if the BWindow of the window may be given back while it is hidden
+    virtual bool HaikuCanUnrealize() const { return false; }
+
+    // gives the BWindows of the windows hidden for a while back (called
+    // from idle time)
+    static void HaikuReleaseHiddenWindows();
 
     // the window which had the focus in this top level window the last time
     // it was active (NULL if none): it gets the focus back on activation
@@ -120,6 +143,14 @@ protected:
     // activation changed (WindowActivated() hook)
     virtual void HaikuActivated(bool active);
 
+    // called when the BWindow was created, before its looper runs: this
+    // thread owns its lock, the state kept while there was no window (title,
+    // size limits...) is applied here
+    virtual void HaikuWindowCreated(BWindow *window);
+
+    // applies the size limits of the wx window to the BWindow
+    void HaikuApplySizeLimits();
+
 protected:
     BWindow *m_window;
 
@@ -145,6 +176,10 @@ protected:
     // created without a position and not moved since: the window is put
     // in a sensible place when it is shown for the first time
     bool m_autoPosition;
+
+    // when the window was hidden (milliseconds, wxGetLocalTimeMillis()),
+    // for HaikuReleaseHiddenWindows()
+    wxLongLong m_hiddenSince;
 
     wxDECLARE_ABSTRACT_CLASS(wxNonOwnedWindow);
 };

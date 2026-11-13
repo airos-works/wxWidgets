@@ -20,6 +20,10 @@ public:
 
     virtual bool HaikuAvoidsFocus() const wxOVERRIDE { return true; }
 
+    // popups are shown and hidden often and most are hidden most of the
+    // time: one hidden for a while gives its BWindow back
+    virtual bool HaikuCanUnrealize() const wxOVERRIDE { return true; }
+
 protected:
     virtual void HaikuGetWindowType(int *look, int *feel,
                                     wxUint32 *flags) const wxOVERRIDE;

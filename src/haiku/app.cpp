@@ -374,6 +374,9 @@ bool wxApp::ProcessIdle()
     // bitmaps drawn directly on windows or on other bitmaps
     wxHaikuSyncPendingDraws();
 
+    // popups hidden for a while give their BWindow (and thread) back
+    wxNonOwnedWindow::HaikuReleaseHiddenWindows();
+
     return needMore;
 }
 

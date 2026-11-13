@@ -230,6 +230,7 @@ protected:
     wxString m_windowLabel;
 
     friend class wxNonOwnedWindow;
+    friend void wxHaikuWindowRealized(wxNonOwnedWindow *tlw);
     friend class wxHaikuPaintSession;
 
     wxDECLARE_DYNAMIC_CLASS(wxWindowHaiku);

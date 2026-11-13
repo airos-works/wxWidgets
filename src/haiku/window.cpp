@@ -1435,6 +1435,46 @@ void wxWindowHaiku::HaikuApplyCursor()
     }
 }
 
+static void wxHaikuApplyCursorRecursively(wxWindowHaiku *win);
+
+// What the views of a window could not be told while the top level window
+// had no BWindow (a view without a window has no cursor, no event mask and
+// cannot be the focus view).
+static void wxHaikuRealizedRecursively(wxWindowHaiku *win)
+{
+    // the windows inside inherit the cursor
+    if ( win->GetCursor().IsOk() )
+    {
+        wxHaikuApplyCursorRecursively(win);
+        return;
+    }
+
+    for ( wxWindowList::compatibility_iterator
+            node = win->GetChildren().GetFirst();
+          node;
+          node = node->GetNext() )
+    {
+        wxWindow * const child = node->GetData();
+        if ( !child->IsTopLevel() )
+            wxHaikuRealizedRecursively(child);
+    }
+}
+
+void wxHaikuWindowRealized(wxNonOwnedWindow *tlw)
+{
+    wxHaikuRealizedRecursively(tlw);
+
+    if ( gs_captureWindow && gs_captureWindow->GetTLW() == tlw )
+        gs_captureWindow->HaikuApplyCapture(true);
+
+    if ( gs_focusWindow && gs_focusWindow->GetTLW() == tlw )
+    {
+        BView * const view = gs_focusWindow->GetHaikuView();
+        if ( view )
+            BMessenger(view).SendMessage(wxHAIKU_MSG_MAKE_FOCUS);
+    }
+}
+
 static void wxHaikuApplyCursorRecursively(wxWindowHaiku *win)
 {
     // only to the windows which inherit the cursor

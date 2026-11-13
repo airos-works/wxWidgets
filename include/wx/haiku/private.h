@@ -372,8 +372,11 @@ private:
 class wxHaikuWindow : public BWindow
 {
 public:
+    // the frame reports of the window carry serial numbers from firstSerial
+    // on (see wxNonOwnedWindow::m_frameSerial)
     wxHaikuWindow(wxUint32 handle, BRect frame, const char *title,
-                  window_look look, window_feel feel, uint32 flags);
+                  window_look look, window_feel feel, uint32 flags,
+                  int32 firstSerial = 0);
 
     virtual void DispatchMessage(BMessage *message, BHandler *target);
     virtual void MessageReceived(BMessage *message);
