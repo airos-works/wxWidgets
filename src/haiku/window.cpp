@@ -169,6 +169,69 @@ const ButtonInfo gs_buttonInfo[] =
     { 0x10, wxEVT_AUX2_DOWN, wxEVT_AUX2_UP, wxEVT_AUX2_DCLICK },
 };
 
+// Views are not stacked: app_server gives a mouse event to the first view of
+// a parent which contains the pointer (View::ViewAt()), that is to the one
+// which was added first. In wx the last child is the topmost one, and the
+// controls inside a wxStaticBox are its later siblings: return the window
+// which really is under the pointer where "win" is.
+wxWindowHaiku *TopmostWindowAt(wxWindowHaiku *win, const wxPoint& screen)
+{
+    wxWindowHaiku * const parent = win->IsTopLevel() ? NULL : win->GetParent();
+    if ( !parent )
+        return win;
+
+    wxWindowHaiku *found = NULL;
+    for ( wxWindowList::compatibility_iterator
+            node = parent->GetChildren().GetLast();
+          node;
+          node = node->GetPrevious() )
+    {
+        wxWindowHaiku * const sibling = node->GetData();
+        if ( sibling == win )
+            break;
+
+        if ( sibling->IsTopLevel() || !sibling->IsShown() )
+            continue;
+
+        if ( wxRect(sibling->HaikuGetScreenOrigin(),
+                    sibling->HaikuGetViewSize()).Contains(screen) )
+        {
+            found = sibling;
+            break;
+        }
+    }
+
+    if ( !found )
+        return win;
+
+    // and the deepest of its children there
+    for ( ;; )
+    {
+        wxWindowHaiku *child = NULL;
+        for ( wxWindowList::compatibility_iterator
+                node = found->GetChildren().GetLast();
+              node;
+              node = node->GetPrevious() )
+        {
+            wxWindowHaiku * const w = node->GetData();
+            if ( !w->IsTopLevel() && w->IsShown()
+                    && wxRect(w->HaikuGetScreenOrigin(),
+                              w->HaikuGetViewSize()).Contains(screen) )
+            {
+                child = w;
+                break;
+            }
+        }
+
+        if ( !child )
+            break;
+
+        found = child;
+    }
+
+    return found;
+}
+
 void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
 {
     // drop the copies of a message already handled
@@ -192,6 +255,15 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                          (int)floorf(he.screenWhere.y));
     gs_mousePos = screen;
 
+    // the window under the pointer may be a sibling above the one whose
+    // view got the message
+    wxWindowHaiku * const viewWindow = source;
+    if ( !(he.type == wxHAIKU_EVT_MOUSE_MOVED
+            && (he.transit == B_EXITED_VIEW || he.transit == B_OUTSIDE_VIEW)) )
+    {
+        source = TopmostWindowAt(source, screen);
+    }
+
     // who gets the event
     wxWindowHaiku *target = gs_captureWindow ? gs_captureWindow
                                              : gs_buttonWindow ? gs_buttonWindow
@@ -199,7 +271,7 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
     const bool captured = target != source || gs_captureWindow == source;
 
     wxPoint pos;
-    if ( target == source )
+    if ( target == source && source == viewWindow )
     {
         pos = wxPoint((int)floorf(he.where.x), (int)floorf(he.where.y))
                 - target->GetClientAreaOrigin();
@@ -252,8 +324,16 @@ void HandleMouseEvent(wxWindowHaiku *source, const wxHaikuEvent& he)
                 else if ( he.transit == B_EXITED_VIEW
                             || he.transit == B_OUTSIDE_VIEW )
                 {
-                    if ( gs_mouseWindow == source )
+                    // (the window the pointer was in may have been a
+                    // sibling above the one of the view)
+                    if ( gs_mouseWindow == source
+                            || (gs_mouseWindow
+                                && !wxRect(gs_mouseWindow->HaikuGetScreenOrigin(),
+                                           gs_mouseWindow->HaikuGetViewSize())
+                                        .Contains(screen)) )
+                    {
                         SetMouseWindow(NULL, he);
+                    }
                     return;
                 }
                 else
@@ -1539,6 +1619,42 @@ bool wxWindowHaiku::HaikuPaint()
 
     if ( HaikuFindByHandle(handle) == this )
         m_updateRegion.Clear();
+
+    // Views are not clipped against their siblings. The controls inside a
+    // wxStaticBox (or wxRadioBox) are its later siblings: a box painted
+    // after them has just painted its background over them, so they are
+    // painted again.
+    wxWindow * const parent = IsTopLevel() ? NULL : GetParent();
+    if ( parent && HaikuFindByHandle(handle) == this )
+    {
+        wxRect painted(box);
+        painted.Offset(m_rect.GetPosition());
+
+        bool above = false;
+        for ( wxWindowList::compatibility_iterator
+                node = parent->GetChildren().GetFirst();
+              node;
+              node = node->GetNext() )
+        {
+            wxWindowHaiku * const sibling = node->GetData();
+            if ( sibling == this )
+            {
+                above = true;
+                continue;
+            }
+
+            if ( !above || sibling->IsTopLevel() || !sibling->IsShown() )
+                continue;
+
+            wxRect overlap(sibling->m_rect);
+            overlap.Intersect(painted);
+            if ( !overlap.IsEmpty() )
+            {
+                overlap.Offset(-sibling->m_rect.x, -sibling->m_rect.y);
+                sibling->HaikuInvalidate(overlap);
+            }
+        }
+    }
 
     return true;
 }
