@@ -32,6 +32,9 @@
 //    it would leave the other canvas empty. The bitmap stays, an exposed
 //    canvas shows its last frame at once. WXHAIKU_GL_READBACK=1 in the
 //    environment makes all contexts work like this.
+//  - It is also what happens where the kit renders but shows nothing: Mesa's
+//    EGL Haiku driver on Zink (the libglvnd kit with a "zink" renderer, see
+//    KitShowsFrames()). WXHAIKU_GL_READBACK=0 forces the direct path there.
 //  - Contexts share their objects if asked to (BGL_SHARE_CONTEXT, which
 //    shares with the context current when the view is created).
 //
@@ -210,6 +213,7 @@ struct KitInfo
     bool probed;
     bool ok;            // there is a renderer
     int major, minor;
+    std::string renderer;
     std::string extensions;
 
     // what reading a frame has to deal with
@@ -249,17 +253,58 @@ bool KitPresentsInDraw()
     return s_presentsInDraw == 1;
 }
 
-// WXHAIKU_GL_READBACK: never the direct path
-bool AlwaysReadBack()
+// WXHAIKU_GL_READBACK: 1 never takes the direct path, 0 always does where
+// it can (also where the kit is known not to show frames), unset or empty
+// leaves it to KitShowsFrames()
+int ReadBackSetting()
 {
-    static int s_readBack = -1;
-    if ( s_readBack == -1 )
+    static int s_readBack = -2;
+    if ( s_readBack == -2 )
     {
         const char * const value = getenv("WXHAIKU_GL_READBACK");
-        s_readBack = value && *value && strcmp(value, "0") != 0;
+        if ( !value || !*value )
+            s_readBack = -1;
+        else
+            s_readBack = strcmp(value, "0") != 0;
     }
 
-    return s_readBack == 1;
+    return s_readBack;
+}
+
+// Whether the frames a context swaps into its view get on the screen.
+//
+// Not with Mesa's EGL Haiku driver (the libglvnd kit) on Zink. The driver
+// creates Zink on its software winsys when it has no Gallium driver of its
+// own for the GPU, and presents a window surface by handing the back buffer
+// to pipe_screen::flush_frontbuffer() for the winsys to put into the view's
+// bitmap. Zink ignores that winsys: its flush_frontbuffer() presents Kopper
+// swap chains only and returns at once for the driver's textures, so the
+// view never gets a bitmap and stays black, while the rendering itself is
+// right (glReadPixels() reads it). This happens on air/OS PCs with an AMD
+// GPU in every program that also loads Summit's WebKit (wxWebView): the
+// libglvnd libGL of the amdgpu user land loads libEGL.so.1 by name, which is
+// then the one of summit_webkit's private Mesa, Zink on RADV. The renderer
+// string is the only thing which tells.
+//
+// The classic kit's Zink renderer add-on (NVIDIA) shows its frames itself.
+bool KitShowsFrames()
+{
+    return !KitPresentsInDraw() || gs_kit.renderer.compare(0, 4, "zink") != 0;
+}
+
+// Whether contexts may take the direct path at all.
+bool DirectPathAllowed()
+{
+    switch ( ReadBackSetting() )
+    {
+        case 0:
+            return true;
+
+        case 1:
+            return false;
+    }
+
+    return KitShowsFrames();
 }
 
 bool HasExtension(const char *name)
@@ -331,6 +376,11 @@ wxHaikuGLView *CreateView(unsigned long options, const wxSize& size,
         {
             gs_kit.ok = true;
             sscanf(version, "%d.%d", &gs_kit.major, &gs_kit.minor);
+
+            const char * const
+                renderer = (const char *)glGetString(GL_RENDERER);
+            if ( renderer )
+                gs_kit.renderer = renderer;
 
             const char * const
                 extensions = (const char *)glGetString(GL_EXTENSIONS);
@@ -1229,7 +1279,7 @@ bool wxGLContext::SetCurrent(const wxGLCanvas& win) const
         // the context rendered for before is on screen too: the context
         // probably goes on rendering for both then, and its view cannot be
         // in both.
-        const bool direct = !AlwaysReadBack()
+        const bool direct = DirectPathAllowed()
             && (!context->previous || context->previous == &win
                     || !context->previous->IsShownOnScreen());
         if ( direct )
