@@ -12,6 +12,9 @@
 #   AIROS_SDK       SDK root            (default /data1/airos/sdk)
 #   AIROS_DEPS      extra dev packages  (default /data1/airos/deps)
 #
+# wx converts text itself (wxUSE_LIBICONV=OFF): the libiconv found among the
+# extra dev packages of one architecture would be one more library to ship.
+#
 # Without targets everything is built and installed to
 # $WX_INSTALL_ROOT/<arch>; wx-config is in its bin directory.
 set -euo pipefail
@@ -48,6 +51,7 @@ if [[ ! -f $BUILD/build.ninja || $ROOT/build/haiku/build.sh -nt $BUILD/build.nin
 		-DwxUSE_LIBPNG=sys -DwxUSE_LIBJPEG=sys -DwxUSE_LIBTIFF=sys \
 		-DwxUSE_STC=OFF \
 		-DwxUSE_PRIVATE_FONTS=ON \
+		-DwxUSE_LIBICONV=OFF \
 		-DwxUSE_GRAPHICS_CONTEXT=ON \
 		${WX_CMAKE_ARGS:-}
 fi
